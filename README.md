@@ -120,6 +120,16 @@ storage/uploads/
 
 Der Pfad kann über `INVENTORY_STORAGE_DIR` geändert werden. Der komplette `storage/`-Ordner wird nicht versioniert.
 
+## Logo
+
+Ein eigenes Logo kann unter diesem Pfad abgelegt werden:
+
+```txt
+public/kistaro-logo.png
+```
+
+Nach einem Build oder Update erscheint es automatisch in der Seitenleiste und in der mobilen Kopfzeile. Empfohlen ist ein quadratisches PNG mit transparentem Hintergrund, zum Beispiel `512x512`.
+
 ## Backup und Restore
 
 Die Systemseite bietet:

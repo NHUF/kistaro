@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
+import Image from "next/image";
 import Link from "next/link";
 import {
   MdArrowDropDown,
@@ -16,6 +17,8 @@ import {
   MdSettings,
 } from "react-icons/md";
 import type { ReactNode } from "react";
+
+const LOGO_PATH = "/kistaro-logo.png";
 
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: MdDashboard },
@@ -49,11 +52,33 @@ export function AuthorizedShell({ children }: { children: ReactNode }) {
     return <>{children}</>;
   }
 
+  const logo = (
+    <div className="flex items-center gap-3">
+      <Image
+        src={LOGO_PATH}
+        alt=""
+        aria-hidden="true"
+        width={40}
+        height={40}
+        className="hidden h-10 w-10 rounded-xl object-contain"
+        onError={(event) => {
+          event.currentTarget.classList.add("hidden");
+        }}
+        onLoad={(event) => {
+          event.currentTarget.classList.remove("hidden");
+        }}
+      />
+      <h1 className="text-3xl font-semibold uppercase tracking-[0.08em] text-gray-900 dark:text-gray-100">
+        Kistaro
+      </h1>
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-[#eef3ea] dark:bg-gray-950">
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 border-r border-gray-200 bg-white px-5 py-6 shadow-sm dark:border-gray-800 dark:bg-gray-900 lg:flex lg:flex-col">
         <div className="border-b border-gray-200 pb-5 dark:border-gray-800">
-          <h1 className="mt-2 text-3xl font-semibold uppercase tracking-[0.08em] text-gray-900 dark:text-gray-100">Kistaro</h1>
+          {logo}
           <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-gray-400">Navigation</p>
         </div>
 
@@ -95,7 +120,7 @@ export function AuthorizedShell({ children }: { children: ReactNode }) {
           <div className="px-3 py-3">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <h1 className="text-2xl font-semibold uppercase tracking-[0.08em] text-gray-900 dark:text-gray-100">Kistaro</h1>
+                <div className="[&_h1]:text-2xl">{logo}</div>
               </div>
               <form action="/auth/logout" method="post">
                 <button

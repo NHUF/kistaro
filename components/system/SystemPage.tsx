@@ -1,13 +1,15 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { MdCloudDone, MdDataset, MdDownload, MdKey, MdOutlineStorage, MdRefresh, MdSecurity, MdSystemUpdateAlt, MdUploadFile } from "react-icons/md";
+import { MdCloudDone, MdDataset, MdDownload, MdKey, MdOpenInNew, MdOutlineStorage, MdRefresh, MdSecurity, MdSystemUpdateAlt, MdUploadFile } from "react-icons/md";
 import type { SystemStatusData } from "@/lib/system-status";
 import type { UpdateCheckResult } from "@/lib/system-updates";
 
 type Props = {
   status: SystemStatusData;
 };
+
+const GITHUB_REPOSITORY_URL = "https://github.com/NHUF/kistaro";
 
 export function SystemPage({ status }: Props) {
   const [passwordForm, setPasswordForm] = useState({
@@ -389,6 +391,15 @@ export function SystemPage({ status }: Props) {
             </div>
 
             <div className="flex flex-wrap gap-2">
+              <a
+                href={GITHUB_REPOSITORY_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100 dark:hover:bg-gray-800"
+              >
+                <MdOpenInNew className="h-4 w-4" />
+                GitHub öffnen
+              </a>
               <button
                 type="button"
                 onClick={checkUpdates}
