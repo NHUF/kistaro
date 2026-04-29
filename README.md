@@ -13,6 +13,16 @@ Der aktuelle Stand deckt vor allem die Inventarisierung ab:
 - einfacher Geräte-Passwortschutz ohne Accounts
 - Systemseite mit Status, Passwortwechsel, Backup, Restore und Updates
 
+## Schnellinstallation
+
+Für eine frische Debian-12-VM als `root`:
+
+```bash
+apt-get update -qq && apt-get install -y -qq ca-certificates curl tar && rm -rf /opt/kistaro && mkdir -p /opt/kistaro && curl -fsSL https://github.com/NHUF/kistaro/archive/refs/tags/v0.1.2.tar.gz | tar -xz -C /opt/kistaro --strip-components=1 && cd /opt/kistaro && bash ./deploy/proxmox/install-instance.sh
+```
+
+Das Skript erstellt beim ersten Lauf `install-config.txt`, öffnet sie in `nano` und setzt danach die Installation automatisch fort.
+
 ## Zielbild
 
 Die App soll als geschlossene Instanz auf einem Proxmox-Server laufen:
@@ -23,12 +33,12 @@ Die App soll als geschlossene Instanz auf einem Proxmox-Server laufen:
 - mit Updates über GitHub Releases
 - mit einem einzigen Installationsbefehl
 
-## Ein-Befehl-Installation
+## Manuelle Installation aus vorhandenem Repository
 
 Wenn das Repository bereits auf dem Zielsystem liegt:
 
 ```bash
-sudo bash ./deploy/proxmox/install-instance.sh
+bash ./deploy/proxmox/install-instance.sh
 ```
 
 Das Skript erledigt:
@@ -65,7 +75,7 @@ DATABASE_URL=
 INVENTORY_STORAGE_DIR=storage
 INVENTORY_APP_PASSWORD=
 INVENTORY_APP_SECRET=auto
-INVENTORY_UPDATE_REPOSITORY=
+INVENTORY_UPDATE_REPOSITORY=NHUF/kistaro
 INVENTORY_UPDATE_TOKEN=
 INVENTORY_BACKUP_DIR=storage/backups
 ```
@@ -74,9 +84,9 @@ Mindestens prüfen oder ausfüllen:
 - `APP_BASE_URL`: die spätere Browser-Adresse, zum Beispiel `http://192.168.5.229:3000`
 - `INVENTORY_APP_PASSWORD`: das Passwort zum Freischalten neuer Geräte
 - `POSTGRES_PASSWORD`: ein eigenes lokales Datenbank-Passwort
-- `INVENTORY_UPDATE_REPOSITORY`: GitHub Repository im Format `owner/repo`, wenn Updates über die Systemseite genutzt werden sollen
+- `INVENTORY_UPDATE_REPOSITORY`: GitHub Repository im Format `owner/repo`
 
-Wenn `DATABASE_URL` leer bleibt, wird sie aus den `POSTGRES_*`-Werten erzeugt.
+Wenn `DATABASE_URL` leer bleibt, wird sie aus den `POSTGRES_*`-Werten erzeugt. Für das öffentliche Kistaro-Repository bleibt `INVENTORY_UPDATE_TOKEN` leer.
 
 ## Lokale Datenbank
 
@@ -132,12 +142,10 @@ Neue Versionen werden als GitHub Release veröffentlicht. Die Systemseite kann d
 Konfiguration in `install-config.txt` oder `.env.local`:
 
 ```txt
-INVENTORY_UPDATE_REPOSITORY=dein-github-name/kistaro
+INVENTORY_UPDATE_REPOSITORY=NHUF/kistaro
 INVENTORY_UPDATE_TOKEN=
 INVENTORY_BACKUP_DIR=storage/backups
 ```
-
-Für öffentliche Repositories bleibt `INVENTORY_UPDATE_TOKEN` leer. Für private Repositories wird ein GitHub-Token mit Leserechten auf Releases benötigt. Der Token bleibt nur serverseitig in `.env.local` und wird nicht an den Browser ausgeliefert.
 
 Der Update-Ablauf:
 - Die Systemseite fragt GitHub Releases ab.

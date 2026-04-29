@@ -808,7 +808,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
             <div className="bg-gradient-to-br from-green-700 via-green-600 to-emerald-500 px-4 py-5 text-white md:px-6 lg:py-6">
               <div className="mt-4 max-w-2xl">
                 <h1 className="text-2xl font-semibold leading-tight lg:text-3xl">Kistaro</h1>
-                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                <p className="mt-1 text-sm font-medium text-green-50/95">
                   Ordnung für alles, was zählt.
                 </p>
                 <p className="mt-1 max-w-xl text-sm text-green-50/90">

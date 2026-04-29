@@ -192,7 +192,7 @@ export function SystemPage({ status }: Props) {
       value: `v${status.appVersion}`,
       meta: status.runtime,
       icon: MdCloudDone,
-      accent: "text-gray-800",
+      accent: "text-gray-800 dark:text-gray-100",
     },
   ];
 
