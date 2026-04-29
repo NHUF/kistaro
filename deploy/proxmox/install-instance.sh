@@ -113,6 +113,15 @@ is_truthy() {
   [[ "${value}" == "1" || "${value}" == "true" || "${value}" == "yes" || "${value}" == "ja" ]]
 }
 
+validate_pg_identifier() {
+  local value="$1"
+  [[ "${value}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]
+}
+
+sql_literal_escape() {
+  printf "%s" "$1" | sed "s/'/''/g"
+}
+
 config_complete() {
   local required_keys=(
     "APP_BASE_URL"
@@ -241,6 +250,14 @@ prepare_postgres() {
   database_password="$(read_config_value "POSTGRES_PASSWORD")"
   database_password="${database_password:-kistaro}"
 
+  if ! validate_pg_identifier "${database_name}" || ! validate_pg_identifier "${database_user}"; then
+    echo "POSTGRES_DB und POSTGRES_USER dürfen aktuell nur Buchstaben, Zahlen und Unterstriche enthalten und nicht mit einer Zahl beginnen."
+    exit 1
+  fi
+
+  local escaped_password
+  escaped_password="$(sql_literal_escape "${database_password}")"
+
   run_quiet "PostgreSQL wird gestartet" systemctl restart postgresql
   run_quiet "PostgreSQL Autostart wird aktiviert" systemctl enable postgresql
 
@@ -249,9 +266,9 @@ prepare_postgres() {
 do \$\$
 begin
   if not exists (select 1 from pg_roles where rolname = '${database_user}') then
-    create role "${database_user}" login password '${database_password}';
+    create role "${database_user}" login password '${escaped_password}';
   else
-    alter role "${database_user}" with login password '${database_password}';
+    alter role "${database_user}" with login password '${escaped_password}';
   end if;
 end
 \$\$;

@@ -96,6 +96,10 @@ function createSecret() {
   return randomBytes(32).toString("base64url");
 }
 
+function encodeConnectionPart(value) {
+  return encodeURIComponent(value ?? "");
+}
+
 function writeConfigTemplate() {
   writeFileSync(configPath, template, "utf8");
   console.log("");
@@ -112,7 +116,7 @@ function buildEnvFile(config) {
       : config.INVENTORY_APP_SECRET;
   const databaseUrl =
     config.DATABASE_URL ||
-    `postgres://${config.POSTGRES_USER}:${config.POSTGRES_PASSWORD}@${config.POSTGRES_HOST}:${config.POSTGRES_PORT}/${config.POSTGRES_DB}`;
+    `postgres://${encodeConnectionPart(config.POSTGRES_USER)}:${encodeConnectionPart(config.POSTGRES_PASSWORD)}@${config.POSTGRES_HOST}:${config.POSTGRES_PORT}/${encodeConnectionPart(config.POSTGRES_DB)}`;
 
   return {
     envText: `# Generiert durch scripts/setup-instance.mjs

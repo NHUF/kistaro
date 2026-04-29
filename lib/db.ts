@@ -3,9 +3,13 @@ import { Pool, type QueryResultRow } from "pg";
 const globalForDb = globalThis as unknown as { kistaroPool?: Pool };
 
 function getConnectionString() {
+  const user = encodeURIComponent(process.env.POSTGRES_USER || "kistaro");
+  const password = encodeURIComponent(process.env.POSTGRES_PASSWORD || "kistaro");
+  const database = encodeURIComponent(process.env.POSTGRES_DB || "kistaro");
+
   return (
     process.env.DATABASE_URL ||
-    `postgres://${process.env.POSTGRES_USER || "kistaro"}:${process.env.POSTGRES_PASSWORD || "kistaro"}@${process.env.POSTGRES_HOST || "127.0.0.1"}:${process.env.POSTGRES_PORT || "5432"}/${process.env.POSTGRES_DB || "kistaro"}`
+    `postgres://${user}:${password}@${process.env.POSTGRES_HOST || "127.0.0.1"}:${process.env.POSTGRES_PORT || "5432"}/${database}`
   );
 }
 
