@@ -1,0 +1,361 @@
+import type { ItemStatus, LocationType, Tag } from "@/lib/inventory";
+import { supabase } from "@/lib/supabase";
+
+export type LocationRecord = {
+  id: string;
+  name: string;
+  parent_id: string | null;
+  type: LocationType | null;
+  icon_name?: string | null;
+  image_path?: string | null;
+  description?: string | null;
+  created_at?: string;
+};
+
+export type ItemListRecord = {
+  id: string;
+  name: string;
+  icon_name?: string | null;
+  status?: ItemStatus | null;
+  image_path?: string | null;
+};
+
+export type ItemRecord = {
+  id: string;
+  name: string;
+  location_id: string | null;
+  description?: string | null;
+  value?: number | null;
+  purchase_date?: string | null;
+  status?: ItemStatus | null;
+  icon_name?: string | null;
+  image_path?: string | null;
+  created_at?: string;
+};
+
+export type ItemDocumentRecord = {
+  id: string;
+  item_id: string;
+  title: string;
+  document_type?: string | null;
+  file_path: string;
+  created_at?: string;
+};
+
+export type LinkedItemRecord = {
+  id: string;
+  name: string;
+  location_id: string | null;
+  status?: ItemStatus | null;
+  icon_name?: string | null;
+  image_path?: string | null;
+};
+
+export type LocationDetailData = {
+  location: LocationRecord | null;
+  allLocations: LocationRecord[];
+  childLocations: LocationRecord[];
+  items: ItemListRecord[];
+  assignedTags: Tag[];
+  availableTags: Tag[];
+};
+
+export type ItemDetailData = {
+  item: ItemRecord | null;
+  locations: Array<{ id: string; name: string }>;
+  assignedTags: Tag[];
+  availableTags: Tag[];
+  documents: ItemDocumentRecord[];
+  linkedItems: LinkedItemRecord[];
+  allItems: ItemRecord[];
+};
+
+export type DashboardData = {
+  locations: LocationRecord[];
+  items: ItemRecord[];
+  topTags: TagUsageRecord[];
+};
+
+export type SearchResultRecord = {
+  result_type: "location" | "item" | "tag";
+  result_id: string;
+  title: string;
+  subtitle: string | null;
+  meta: string | null;
+  href: string;
+};
+
+export type TagUsageRecord = {
+  id: string;
+  name: string;
+  item_count: number;
+  location_count: number;
+};
+
+export type InventoryTemplateRecord = {
+  id: string;
+  entity_type: "item" | "location";
+  name: string;
+  description?: string | null;
+  location_type?: LocationType | null;
+  item_status?: ItemStatus | null;
+  icon_name?: string | null;
+  image_path?: string | null;
+  item_value?: number | null;
+  item_purchase_date?: string | null;
+  created_at?: string;
+};
+
+export type InventoryActivityRecord = {
+  id: number;
+  entity_type: string;
+  entity_id?: string | null;
+  action: "create" | "update" | "delete" | "move" | "attach" | "detach";
+  title: string;
+  description?: string | null;
+  actor_label?: string | null;
+  metadata?: Record<string, unknown> | null;
+  created_at: string;
+};
+
+export type TagDetailData = {
+  tag: Tag | null;
+  items: ItemRecord[];
+  locations: LocationRecord[];
+  usage: TagUsageRecord | null;
+};
+
+export async function fetchLocationDetailData(locationId: string): Promise<LocationDetailData> {
+  const [
+    locationResponse,
+    allLocationsResponse,
+    childLocationsResponse,
+    itemsResponse,
+    locationTagsResponse,
+    allTagsResponse,
+  ] = await Promise.all([
+    supabase.from<LocationRecord>("locations").select("*").eq("id", locationId).maybeSingle(),
+    supabase.from<LocationRecord[]>("locations").select("*").order("name"),
+    supabase.from<LocationRecord[]>("locations").select("*").eq("parent_id", locationId).order("name"),
+    supabase
+      .from<ItemListRecord[]>("items")
+      .select("id, name, icon_name, status, image_path")
+      .eq("location_id", locationId)
+      .order("name"),
+    supabase.from<Array<{ tag_id: string }>>("location_tags").select("tag_id").eq("location_id", locationId),
+    supabase.from<Tag[]>("tags").select("id, name").order("name"),
+  ]);
+
+  if (locationResponse.error) {
+    throw new Error(locationResponse.error.message);
+  }
+
+  const availableTags = (allTagsResponse.data ?? []) as Tag[];
+  const tagIds = (locationTagsResponse.data ?? []).map((entry) => entry.tag_id as string);
+
+  return {
+    location: (locationResponse.data as LocationRecord | null) ?? null,
+    allLocations: (allLocationsResponse.data ?? []) as LocationRecord[],
+    childLocations: (childLocationsResponse.data ?? []) as LocationRecord[],
+    items: (itemsResponse.data ?? []) as ItemListRecord[],
+    assignedTags: availableTags.filter((tag) => tagIds.includes(tag.id)),
+    availableTags,
+  };
+}
+
+export async function fetchItemDetailData(itemId: string): Promise<ItemDetailData> {
+  const [
+    itemResponse,
+    locationsResponse,
+    itemTagsResponse,
+    allTagsResponse,
+    documentsResponse,
+    linkedIdsResponse,
+    allItemsResponse,
+  ] = await Promise.all([
+    supabase.from<ItemRecord>("items").select("*").eq("id", itemId).maybeSingle(),
+    supabase.from<Array<{ id: string; name: string }>>("locations").select("id, name").order("name"),
+    supabase.from<Array<{ tag_id: string }>>("item_tags").select("tag_id").eq("item_id", itemId),
+    supabase.from<Tag[]>("tags").select("id, name").order("name"),
+    supabase.from<ItemDocumentRecord[]>("item_documents").select("*").eq("item_id", itemId).order("created_at", { ascending: false }),
+    supabase.from<Array<{ linked_item_id: string }>>("item_links").select("linked_item_id").eq("item_id", itemId),
+    supabase.from<ItemRecord[]>("items").select("id, name, location_id, status, icon_name, image_path").order("name"),
+  ]);
+
+  if (itemResponse.error) {
+    throw new Error(itemResponse.error.message);
+  }
+
+  const availableTags = (allTagsResponse.data ?? []) as Tag[];
+  const tagIds = (itemTagsResponse.data ?? []).map((entry) => entry.tag_id as string);
+  const allItems = (allItemsResponse.data ?? []) as ItemRecord[];
+  const linkedItemIds = new Set((linkedIdsResponse.data ?? []).map((row) => row.linked_item_id as string));
+
+  return {
+    item: (itemResponse.data as ItemRecord | null) ?? null,
+    locations: (locationsResponse.data ?? []) as Array<{ id: string; name: string }>,
+    assignedTags: availableTags.filter((tag) => tagIds.includes(tag.id)),
+    availableTags,
+    documents: (documentsResponse.data ?? []) as ItemDocumentRecord[],
+    linkedItems: allItems.filter((entry) => linkedItemIds.has(entry.id)) as LinkedItemRecord[],
+    allItems,
+  };
+}
+
+export async function fetchDashboardData(): Promise<DashboardData> {
+  const [locationsResponse, itemsResponse, tagsResponse, itemTagsResponse, locationTagsResponse] = await Promise.all([
+    supabase.from<LocationRecord[]>("locations").select("*").order("name"),
+    supabase.from<ItemRecord[]>("items").select("*").order("name"),
+    supabase.from<Tag[]>("tags").select("id, name").order("name"),
+    supabase.from<Array<{ item_id: string; tag_id: string }>>("item_tags").select("item_id, tag_id"),
+    supabase.from<Array<{ location_id: string; tag_id: string }>>("location_tags").select("location_id, tag_id"),
+  ]);
+
+  if (locationsResponse.error) {
+    throw new Error(locationsResponse.error.message);
+  }
+
+  if (itemsResponse.error) {
+    throw new Error(itemsResponse.error.message);
+  }
+
+  if (tagsResponse.error) {
+    throw new Error(tagsResponse.error.message);
+  }
+
+  const tags = (tagsResponse.data ?? []) as Tag[];
+  const itemTags = (itemTagsResponse.data ?? []) as Array<{ item_id: string; tag_id: string }>;
+  const locationTags = (locationTagsResponse.data ?? []) as Array<{ location_id: string; tag_id: string }>;
+
+  const topTags = tags
+    .map((tag) => ({
+      id: tag.id,
+      name: tag.name,
+      item_count: itemTags.filter((entry) => entry.tag_id === tag.id).length,
+      location_count: locationTags.filter((entry) => entry.tag_id === tag.id).length,
+    }))
+    .filter((tag) => tag.item_count > 0 || tag.location_count > 0)
+    .sort((a, b) => b.item_count + b.location_count - (a.item_count + a.location_count))
+    .slice(0, 8);
+
+  return {
+    locations: (locationsResponse.data ?? []) as LocationRecord[],
+    items: (itemsResponse.data ?? []) as ItemRecord[],
+    topTags,
+  };
+}
+
+export async function fetchSearchResults(query: string): Promise<SearchResultRecord[]> {
+  const normalizedQuery = query.trim();
+
+  if (!normalizedQuery) {
+    return [];
+  }
+
+  const { data, error } = await supabase.rpc("search_inventory", {
+    search_term: normalizedQuery,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data ?? []) as SearchResultRecord[];
+}
+
+export async function fetchTagsOverview(): Promise<TagUsageRecord[]> {
+  const [tagsResponse, itemTagsResponse, locationTagsResponse] = await Promise.all([
+    supabase.from<Tag[]>("tags").select("id, name").order("name"),
+    supabase.from<Array<{ item_id: string; tag_id: string }>>("item_tags").select("item_id, tag_id"),
+    supabase.from<Array<{ location_id: string; tag_id: string }>>("location_tags").select("location_id, tag_id"),
+  ]);
+
+  if (tagsResponse.error) {
+    throw new Error(tagsResponse.error.message);
+  }
+
+  const tags = (tagsResponse.data ?? []) as Tag[];
+  const itemTags = (itemTagsResponse.data ?? []) as Array<{ item_id: string; tag_id: string }>;
+  const locationTags = (locationTagsResponse.data ?? []) as Array<{ location_id: string; tag_id: string }>;
+
+  return tags
+    .map((tag) => ({
+      id: tag.id,
+      name: tag.name,
+      item_count: itemTags.filter((entry) => entry.tag_id === tag.id).length,
+      location_count: locationTags.filter((entry) => entry.tag_id === tag.id).length,
+    }))
+    .sort((a, b) => {
+      const usageDiff = b.item_count + b.location_count - (a.item_count + a.location_count);
+      return usageDiff !== 0 ? usageDiff : a.name.localeCompare(b.name);
+    });
+}
+
+export async function fetchTagDetailData(tagId: string): Promise<TagDetailData> {
+  const [tagResponse, itemTagsResponse, locationTagsResponse, itemsResponse, locationsResponse] =
+    await Promise.all([
+      supabase.from<Tag>("tags").select("id, name").eq("id", tagId).maybeSingle(),
+      supabase.from<Array<{ item_id: string }>>("item_tags").select("item_id").eq("tag_id", tagId),
+      supabase.from<Array<{ location_id: string }>>("location_tags").select("location_id").eq("tag_id", tagId),
+      supabase.from<ItemRecord[]>("items").select("*").order("name"),
+      supabase.from<LocationRecord[]>("locations").select("*").order("name"),
+    ]);
+
+  if (tagResponse.error) {
+    throw new Error(tagResponse.error.message);
+  }
+
+  const tag = (tagResponse.data as Tag | null) ?? null;
+  const allItems = (itemsResponse.data ?? []) as ItemRecord[];
+  const allLocations = (locationsResponse.data ?? []) as LocationRecord[];
+  const itemIds = new Set((itemTagsResponse.data ?? []).map((entry) => entry.item_id as string));
+  const locationIds = new Set(
+    (locationTagsResponse.data ?? []).map((entry) => entry.location_id as string)
+  );
+
+  return {
+    tag,
+    items: allItems.filter((item) => itemIds.has(item.id)),
+    locations: allLocations.filter((location) => locationIds.has(location.id)),
+    usage: tag
+      ? {
+          id: tag.id,
+          name: tag.name,
+          item_count: itemIds.size,
+          location_count: locationIds.size,
+        }
+      : null,
+  };
+}
+
+export async function fetchTemplatesOverview(): Promise<InventoryTemplateRecord[]> {
+  const { data, error } = await supabase
+    .from<InventoryTemplateRecord[]>("inventory_templates")
+    .select("*")
+    .order("entity_type")
+    .order("name");
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data ?? []) as InventoryTemplateRecord[];
+}
+
+export async function fetchInventoryActivity(limit = 200): Promise<InventoryActivityRecord[]> {
+  const { data, error } = await supabase
+    .from<InventoryActivityRecord[]>("inventory_activity_log")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    if (error.message.includes("inventory_activity_log")) {
+      return [];
+    }
+
+    throw new Error(error.message);
+  }
+
+  return (data ?? []) as InventoryActivityRecord[];
+}
