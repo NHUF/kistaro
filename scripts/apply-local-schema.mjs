@@ -3,12 +3,15 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { loadLocalEnv } from "./load-local-env.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const projectRoot = resolve(__dirname, "..");
 const migrationsDir = resolve(projectRoot, "supabase", "migrations");
 const seedMigration = "20260425160046_seed_sample_apartment_inventory.sql";
+
+loadLocalEnv(projectRoot);
 
 function getDatabaseUrl() {
   const user = encodeURIComponent(process.env.POSTGRES_USER || "kistaro");
