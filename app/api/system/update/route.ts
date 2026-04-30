@@ -3,7 +3,12 @@ import { dirname, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { NextResponse } from "next/server";
 import { createDatabaseBackupZip } from "@/lib/system-backup";
-import { checkForInventoryUpdate } from "@/lib/system-updates";
+import {
+  checkForInventoryUpdate,
+  getUpdateStatusPath,
+  readUpdateStatus,
+  writeUpdateStatus,
+} from "@/lib/system-updates";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,7 +37,9 @@ export async function GET() {
   });
 }
 
-export async function POST() {
+export async function POST(request: Request) {
+  const payload = (await request.json().catch(() => ({}))) as { force?: boolean };
+  const force = payload.force === true;
   const update = await checkForInventoryUpdate();
 
   if (!update.configured) {
@@ -46,7 +53,7 @@ export async function POST() {
     return NextResponse.json({ error: update.error }, { status: 502 });
   }
 
-  if (!update.updateAvailable || !update.latestTag || !update.tarballUrl) {
+  if ((!update.updateAvailable && !force) || !update.latestTag || !update.tarballUrl) {
     return NextResponse.json(
       { error: "Es ist kein neueres Release verfügbar." },
       { status: 409 },
@@ -59,6 +66,14 @@ export async function POST() {
 
     mkdirSync(dirname(backupPath), { recursive: true });
     writeFileSync(backupPath, backup.buffer);
+    writeUpdateStatus({
+      state: "running",
+      targetTag: update.latestTag,
+      message: "Update wurde vorbereitet und startet.",
+      progress: 5,
+      startedAt: new Date().toISOString(),
+      finishedAt: null,
+    });
 
     const child = spawn("bash", [getUpdateScriptPath()], {
       cwd: process.cwd(),
@@ -69,6 +84,7 @@ export async function POST() {
         INVENTORY_UPDATE_TARGET_TAG: update.latestTag,
         INVENTORY_UPDATE_TARBALL_URL: update.tarballUrl,
         INVENTORY_PRE_UPDATE_BACKUP: backupPath,
+        INVENTORY_UPDATE_STATUS_FILE: getUpdateStatusPath(),
       },
     });
 
@@ -81,6 +97,7 @@ export async function POST() {
       targetVersion: update.latestVersion,
       targetTag: update.latestTag,
       backupPath,
+      updateStatus: readUpdateStatus(),
     });
   } catch (error) {
     return NextResponse.json(

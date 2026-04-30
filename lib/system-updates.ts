@@ -1,5 +1,16 @@
-import { readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { resolve } from "node:path";
+
+export type UpdateJobStatus = {
+  state: "idle" | "running" | "completed" | "failed";
+  targetTag?: string | null;
+  message?: string | null;
+  progress?: number | null;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  logTail?: string[];
+};
 
 export type UpdateCheckResult = {
   configured: boolean;
@@ -11,6 +22,7 @@ export type UpdateCheckResult = {
   releaseUrl: string | null;
   tarballUrl: string | null;
   checkedAt: string;
+  updateStatus: UpdateJobStatus | null;
   error?: string;
 };
 
@@ -24,7 +36,7 @@ type GitHubReleaseResponse = {
 export function getCurrentAppVersion() {
   try {
     const packageJson = JSON.parse(
-      readFileSync(resolve(process.cwd(), "package.json"), "utf8"),
+      readFileSync(resolve(/*turbopackIgnore: true*/ process.cwd(), "package.json"), "utf8"),
     ) as { version?: string };
 
     return packageJson.version ?? "0.0.0";
@@ -73,6 +85,61 @@ function getUpdateRepository() {
   return process.env.INVENTORY_UPDATE_REPOSITORY?.trim() || "NHUF/kistaro";
 }
 
+export function getUpdateStatusPath() {
+  return resolve(
+    /*turbopackIgnore: true*/ process.cwd(),
+    process.env.INVENTORY_UPDATE_STATUS_FILE || "storage/update-status.json",
+  );
+}
+
+function getUpdateLogPath() {
+  return resolve(/*turbopackIgnore: true*/ process.cwd(), "update.log");
+}
+
+function readLogTail() {
+  try {
+    if (!existsSync(getUpdateLogPath())) {
+      return [];
+    }
+
+    return readFileSync(getUpdateLogPath(), "utf8")
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .slice(-20);
+  } catch {
+    return [];
+  }
+}
+
+export function readUpdateStatus(): UpdateJobStatus | null {
+  try {
+    const statusPath = getUpdateStatusPath();
+
+    if (!existsSync(statusPath)) {
+      return null;
+    }
+
+    const status = JSON.parse(readFileSync(statusPath, "utf8")) as UpdateJobStatus;
+    return {
+      ...status,
+      logTail: readLogTail(),
+    };
+  } catch {
+    return {
+      state: "failed",
+      message: "Update-Status konnte nicht gelesen werden.",
+      progress: null,
+      logTail: readLogTail(),
+    };
+  }
+}
+
+export function writeUpdateStatus(status: UpdateJobStatus) {
+  const statusPath = getUpdateStatusPath();
+  mkdirSync(dirname(statusPath), { recursive: true });
+  writeFileSync(statusPath, JSON.stringify(status, null, 2), "utf8");
+}
+
 function createNotConfiguredResult(currentVersion: string): UpdateCheckResult {
   return {
     configured: false,
@@ -84,6 +151,7 @@ function createNotConfiguredResult(currentVersion: string): UpdateCheckResult {
     releaseUrl: null,
     tarballUrl: null,
     checkedAt: new Date().toISOString(),
+    updateStatus: readUpdateStatus(),
     error: "INVENTORY_UPDATE_REPOSITORY ist nicht konfiguriert.",
   };
 }
@@ -127,6 +195,7 @@ export async function checkForInventoryUpdate(): Promise<UpdateCheckResult> {
         releaseUrl: null,
         tarballUrl: null,
         checkedAt: new Date().toISOString(),
+        updateStatus: readUpdateStatus(),
         error: `GitHub konnte nicht abgefragt werden (${response.status}).`,
       };
     }
@@ -145,6 +214,7 @@ export async function checkForInventoryUpdate(): Promise<UpdateCheckResult> {
       releaseUrl: release.html_url ?? null,
       tarballUrl: release.tarball_url ?? null,
       checkedAt: new Date().toISOString(),
+      updateStatus: readUpdateStatus(),
     };
   } catch (error) {
     return {
@@ -157,6 +227,7 @@ export async function checkForInventoryUpdate(): Promise<UpdateCheckResult> {
       releaseUrl: null,
       tarballUrl: null,
       checkedAt: new Date().toISOString(),
+      updateStatus: readUpdateStatus(),
       error:
         error instanceof Error
           ? error.message

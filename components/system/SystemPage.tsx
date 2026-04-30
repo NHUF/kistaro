@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { MdCloudDone, MdDataset, MdDownload, MdKey, MdOpenInNew, MdOutlineStorage, MdRefresh, MdSecurity, MdSystemUpdateAlt, MdUploadFile } from "react-icons/md";
 import type { SystemStatusData } from "@/lib/system-status";
 import type { UpdateCheckResult } from "@/lib/system-updates";
@@ -21,6 +21,7 @@ export function SystemPage({ status }: Props) {
   const [restoreMessage, setRestoreMessage] = useState<string | null>(null);
   const [updateInfo, setUpdateInfo] = useState<UpdateCheckResult | null>(null);
   const [updateMessage, setUpdateMessage] = useState<string | null>(null);
+  const [updatePolling, setUpdatePolling] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [passwordPending, startPasswordTransition] = useTransition();
   const [restorePending, startRestoreTransition] = useTransition();
@@ -128,6 +129,7 @@ export function SystemPage({ status }: Props) {
       const result = (await response.json()) as UpdateCheckResult;
 
       setUpdateInfo(result);
+      setUpdatePolling(result.updateStatus?.state === "running");
 
       if (!response.ok || result.error) {
         setUpdateMessage(result.error ?? "Update-Prüfung ist fehlgeschlagen.");
@@ -142,30 +144,82 @@ export function SystemPage({ status }: Props) {
     });
   }
 
-  async function installUpdate() {
+  async function installUpdate(force = false) {
     setUpdateMessage(null);
+    setUpdatePolling(true);
 
     startUpdateTransition(async () => {
       const response = await fetch("/api/system/update", {
         method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ force }),
       });
       const result = (await response.json()) as {
         error?: string;
         message?: string;
         targetVersion?: string;
+        updateStatus?: UpdateCheckResult["updateStatus"];
       };
 
       if (!response.ok) {
         setUpdateMessage(result.error ?? "Update konnte nicht gestartet werden.");
+        setUpdatePolling(false);
         return;
       }
 
+      setUpdateInfo((current) =>
+        current
+          ? {
+              ...current,
+              updateStatus: result.updateStatus ?? current.updateStatus,
+            }
+          : current,
+      );
+
       setUpdateMessage(
         result.message ??
-          `Update auf Version ${result.targetVersion ?? "neu"} wurde gestartet.`,
+          `${force ? "Neuinstallation" : "Update"} auf Version ${result.targetVersion ?? "neu"} wurde gestartet.`,
       );
     });
   }
+
+  useEffect(() => {
+    if (!updatePolling) {
+      return;
+    }
+
+    const intervalId = window.setInterval(async () => {
+      try {
+        const response = await fetch("/api/system/update", {
+          method: "GET",
+          cache: "no-store",
+        });
+        const result = (await response.json()) as UpdateCheckResult;
+
+        setUpdateInfo(result);
+
+        if (result.updateStatus?.state === "completed") {
+          setUpdateMessage("Update abgeschlossen. Bitte Seite neu laden, falls die neue Version noch nicht sichtbar ist.");
+          setUpdatePolling(false);
+        }
+
+        if (result.updateStatus?.state === "failed") {
+          setUpdateMessage(result.updateStatus.message ?? "Update ist fehlgeschlagen.");
+          setUpdatePolling(false);
+        }
+      } catch {
+        setUpdateMessage("Update läuft vermutlich weiter. Verbindung wird nach Dienst-Neustart erneut aufgebaut.");
+      }
+    }, 3000);
+
+    return () => window.clearInterval(intervalId);
+  }, [updatePolling]);
+
+  const updateStatus = updateInfo?.updateStatus ?? null;
+  const showUpdateProgress = updatePending || updatePolling || updateStatus?.state === "running";
+  const updateProgress = Math.max(0, Math.min(100, updateStatus?.progress ?? (updatePending ? 10 : 0)));
 
   const statusCards = [
     {
@@ -412,15 +466,62 @@ export function SystemPage({ status }: Props) {
 
               <button
                 type="button"
-                onClick={installUpdate}
+                onClick={() => void installUpdate(false)}
                 disabled={updatePending || !updateInfo?.updateAvailable}
                 className="inline-flex items-center gap-2 rounded-xl bg-green-700 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-green-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <MdSystemUpdateAlt className="h-4 w-4" />
                 Update installieren
               </button>
+              <button
+                type="button"
+                onClick={() => void installUpdate(true)}
+                disabled={updatePending || !updateInfo?.latestTag}
+                className="inline-flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 px-4 py-2.5 text-sm font-medium text-green-800 shadow-sm transition hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-green-900 dark:bg-green-950/40 dark:text-green-200 dark:hover:bg-green-950"
+              >
+                <MdSystemUpdateAlt className="h-4 w-4" />
+                Neu anwenden
+              </button>
             </div>
           </div>
+
+          {showUpdateProgress || updateStatus ? (
+            <div className="mt-5 rounded-2xl border border-green-100 bg-green-50 p-4 dark:border-green-900/60 dark:bg-green-950/30">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-green-900 dark:text-green-100">
+                    {updateStatus?.state === "completed"
+                      ? "Update abgeschlossen"
+                      : updateStatus?.state === "failed"
+                        ? "Update fehlgeschlagen"
+                        : "Update läuft"}
+                  </p>
+                  <p className="mt-1 text-sm text-green-800/80 dark:text-green-200/80">
+                    {updateStatus?.message ?? "Update wird vorbereitet."}
+                  </p>
+                </div>
+                <span className="rounded-full bg-white px-3 py-1 text-sm font-semibold text-green-800 shadow-sm dark:bg-green-900 dark:text-green-100">
+                  {updateProgress}%
+                </span>
+              </div>
+              <div className="mt-3 h-3 overflow-hidden rounded-full bg-white shadow-inner dark:bg-green-900/70">
+                <div
+                  className={`h-full rounded-full transition-all ${
+                    updateStatus?.state === "failed" ? "bg-red-500" : "bg-green-600"
+                  }`}
+                  style={{ width: `${updateStatus?.state === "failed" ? 100 : updateProgress}%` }}
+                />
+              </div>
+              {updateStatus?.logTail?.length ? (
+                <details className="mt-3 text-xs text-green-900 dark:text-green-100">
+                  <summary className="cursor-pointer font-medium">Update-Log anzeigen</summary>
+                  <pre className="mt-2 max-h-48 overflow-auto rounded-xl bg-white p-3 text-[11px] leading-relaxed text-gray-700 dark:bg-gray-950 dark:text-gray-200">
+                    {updateStatus.logTail.join("\n")}
+                  </pre>
+                </details>
+              ) : null}
+            </div>
+          ) : null}
 
           <dl className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <div>

@@ -61,6 +61,10 @@ function getBaseName(name: string) {
   return name.replace(/-0000$/, "");
 }
 
+function getTemplateName(baseName: string) {
+  return `${baseName.trim().replace(/-0000$/, "")}-0000`;
+}
+
 function getEntityLabel(entityType: "item" | "location") {
   return entityType === "item" ? "Item-Vorlage" : "Location-Vorlage";
 }
@@ -79,6 +83,10 @@ function parseOptionalPrice(value: string) {
   }
 
   return parsedValue;
+}
+
+function isUnknownLocationValueColumn(errorMessage: string) {
+  return errorMessage.includes("location_value") && errorMessage.toLowerCase().includes("column");
 }
 
 export function TemplatesIndexPage({
@@ -128,6 +136,36 @@ export function TemplatesIndexPage({
     }
 
     setTemplates((data ?? []) as InventoryTemplateRecord[]);
+  }
+
+  async function insertTemplate(payload: Partial<InventoryTemplateRecord>) {
+    const response = await supabase.from<InventoryTemplateRecord[]>("inventory_templates").insert(payload);
+
+    if (response.error && isUnknownLocationValueColumn(response.error.message)) {
+      const fallbackPayload = { ...payload };
+      delete fallbackPayload.location_value;
+      return supabase.from<InventoryTemplateRecord[]>("inventory_templates").insert(fallbackPayload);
+    }
+
+    return response;
+  }
+
+  async function updateTemplateRow(templateId: string, payload: Partial<InventoryTemplateRecord>) {
+    const response = await supabase
+      .from<InventoryTemplateRecord[]>("inventory_templates")
+      .update(payload)
+      .eq("id", templateId);
+
+    if (response.error && isUnknownLocationValueColumn(response.error.message)) {
+      const fallbackPayload = { ...payload };
+      delete fallbackPayload.location_value;
+      return supabase
+        .from<InventoryTemplateRecord[]>("inventory_templates")
+        .update(fallbackPayload)
+        .eq("id", templateId);
+    }
+
+    return response;
   }
 
   function updateForm(patch: Partial<TemplateFormState>) {
@@ -191,18 +229,17 @@ export function TemplatesIndexPage({
         return;
       }
 
-      const { error } = await supabase.rpc("create_inventory_template", {
-        template_entity_type: form.entityType,
-        base_name: form.baseName.trim(),
-        template_description: form.description.trim() || null,
-        template_location_type: form.entityType === "location" ? form.locationType || null : null,
-        template_item_status: form.entityType === "item" ? form.itemStatus || null : null,
-        template_icon_name: form.iconName || null,
-        template_image_path: uploadedImagePath,
-        template_item_value: nextItemValue,
-        template_item_purchase_date:
-          form.entityType === "item" ? form.itemPurchaseDate || null : null,
-        template_location_value: nextLocationValue,
+      const { error } = await insertTemplate({
+        entity_type: form.entityType,
+        name: getTemplateName(form.baseName),
+        description: form.description.trim() || null,
+        location_type: form.entityType === "location" ? form.locationType || null : null,
+        item_status: form.entityType === "item" ? form.itemStatus || null : null,
+        icon_name: form.iconName || null,
+        image_path: uploadedImagePath,
+        item_value: form.entityType === "item" ? nextItemValue : null,
+        item_purchase_date: form.entityType === "item" ? form.itemPurchaseDate || null : null,
+        location_value: form.entityType === "location" ? nextLocationValue : null,
       });
 
       if (error) {
@@ -264,18 +301,16 @@ export function TemplatesIndexPage({
         return;
       }
 
-      const { error } = await supabase.rpc("update_inventory_template", {
-        target_template_id: editTemplate.id,
-        base_name: form.baseName.trim(),
-        template_description: form.description.trim() || null,
-        template_location_type: form.entityType === "location" ? form.locationType || null : null,
-        template_item_status: form.entityType === "item" ? form.itemStatus || null : null,
-        template_icon_name: form.iconName || null,
-        template_image_path: nextImagePath,
-        template_item_value: nextItemValue,
-        template_item_purchase_date:
-          form.entityType === "item" ? form.itemPurchaseDate || null : null,
-        template_location_value: nextLocationValue,
+      const { error } = await updateTemplateRow(editTemplate.id, {
+        name: getTemplateName(form.baseName),
+        description: form.description.trim() || null,
+        location_type: form.entityType === "location" ? form.locationType || null : null,
+        item_status: form.entityType === "item" ? form.itemStatus || null : null,
+        icon_name: form.iconName || null,
+        image_path: nextImagePath,
+        item_value: form.entityType === "item" ? nextItemValue : null,
+        item_purchase_date: form.entityType === "item" ? form.itemPurchaseDate || null : null,
+        location_value: form.entityType === "location" ? nextLocationValue : null,
       });
 
       if (error) {
@@ -320,9 +355,10 @@ export function TemplatesIndexPage({
 
     setBusy(true);
     try {
-      const { error } = await supabase.rpc("delete_inventory_template", {
-        target_template_id: deleteTemplate.id,
-      });
+      const { error } = await supabase
+        .from<InventoryTemplateRecord[]>("inventory_templates")
+        .delete()
+        .eq("id", deleteTemplate.id);
 
       if (error) {
         window.alert(error.message);

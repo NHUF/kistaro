@@ -9,12 +9,50 @@ ENV_FILE="${PROJECT_ROOT}/.env.local"
 TARGET_TAG="${INVENTORY_UPDATE_TARGET_TAG:-}"
 TARBALL_URL="${INVENTORY_UPDATE_TARBALL_URL:-}"
 SERVICE_NAME="${SYSTEMD_SERVICE_NAME:-kistaro}"
+STATUS_FILE="${INVENTORY_UPDATE_STATUS_FILE:-${PROJECT_ROOT}/storage/update-status.json}"
+TOTAL_STEPS=6
+STEP_INDEX=0
 
 log() {
   printf '[kistaro-update] %s\n' "$1" | tee -a "${LOG_FILE}"
 }
 
+json_escape() {
+  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+write_status() {
+  local state="$1"
+  local message="$2"
+  local progress="$3"
+  local finished_at="${4:-null}"
+  local escaped_message escaped_target started_at
+
+  mkdir -p "$(dirname "${STATUS_FILE}")"
+  escaped_message="$(json_escape "${message}")"
+  escaped_target="$(json_escape "${TARGET_TAG:-}")"
+  started_at="$(date -Is)"
+
+  if [[ -f "${STATUS_FILE}" ]]; then
+    started_at="$(grep -o '"startedAt"[[:space:]]*:[[:space:]]*"[^"]*"' "${STATUS_FILE}" | head -n1 | sed 's/.*: *"//; s/"$//' || true)"
+    started_at="${started_at:-$(date -Is)}"
+  fi
+
+  cat > "${STATUS_FILE}" <<EOF
+{
+  "state": "${state}",
+  "targetTag": "${escaped_target}",
+  "message": "${escaped_message}",
+  "progress": ${progress},
+  "startedAt": "${started_at}",
+  "finishedAt": ${finished_at}
+}
+EOF
+}
+
 fail() {
+  local progress=$(( STEP_INDEX * 100 / TOTAL_STEPS ))
+  write_status "failed" "$1" "${progress}" "\"$(date -Is)\""
   log "Fehler: $1"
   exit 1
 }
@@ -23,6 +61,9 @@ run_step() {
   local message="$1"
   shift
 
+  STEP_INDEX=$(( STEP_INDEX + 1 ))
+  local progress=$(( STEP_INDEX * 100 / TOTAL_STEPS ))
+  write_status "running" "${message}" "${progress}" "null"
   log "${message}"
 
   if "$@" >>"${LOG_FILE}" 2>&1; then
@@ -120,11 +161,13 @@ main() {
   load_env_file
   validate_input
   log "Update auf ${TARGET_TAG} startet"
+  write_status "running" "Update auf ${TARGET_TAG} startet" 5 "null"
   log "Vorheriges Backup: ${INVENTORY_PRE_UPDATE_BACKUP:-nicht bekannt}"
   download_release
   sync_release
   build_release
   restart_service
+  write_status "completed" "Update auf ${TARGET_TAG} abgeschlossen." 100 "\"$(date -Is)\""
   log "Update auf ${TARGET_TAG} abgeschlossen"
 }
 

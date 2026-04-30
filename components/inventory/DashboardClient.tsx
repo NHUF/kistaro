@@ -78,6 +78,14 @@ function parseOptionalPrice(value: string, label = "Preis") {
   return parsedValue;
 }
 
+function getTemplateName(baseName: string) {
+  return `${baseName.trim().replace(/-0000$/, "")}-0000`;
+}
+
+function isUnknownLocationValueColumn(errorMessage: string) {
+  return errorMessage.includes("location_value") && errorMessage.toLowerCase().includes("column");
+}
+
 export function DashboardClient({ initialData }: { initialData: DashboardData }) {
   const handledCreateIntentRef = useRef(false);
   const [locations, setLocations] = useState<Location[]>(initialData.locations as Location[]);
@@ -242,6 +250,18 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
     });
   }
 
+  async function insertTemplate(payload: Partial<InventoryTemplate>) {
+    const response = await supabase.from<InventoryTemplate[]>("inventory_templates").insert(payload);
+
+    if (response.error && isUnknownLocationValueColumn(response.error.message)) {
+      const fallbackPayload = { ...payload };
+      delete fallbackPayload.location_value;
+      return supabase.from<InventoryTemplate[]>("inventory_templates").insert(fallbackPayload);
+    }
+
+    return response;
+  }
+
   async function create() {
     if (createMode === "manual" && createTarget === "template") {
       const baseName = createType === "item" ? itemName.trim() : locName.trim();
@@ -277,17 +297,17 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
         return;
       }
 
-      const { error } = await supabase.rpc("create_inventory_template", {
-        template_entity_type: createType,
-        base_name: baseName,
-        template_description: createType === "item" ? itemDescription.trim() || null : locDescription.trim() || null,
-        template_location_type: createType === "location" ? locType || null : null,
-        template_item_status: createType === "item" ? itemStatus || null : null,
-        template_icon_name: createType === "item" ? itemIcon || null : locIcon || null,
-        template_image_path: uploadedImagePath,
-        template_item_value: nextItemValue,
-        template_item_purchase_date: createType === "item" ? itemPurchaseDate || null : null,
-        template_location_value: nextLocationValue,
+      const { error } = await insertTemplate({
+        entity_type: createType,
+        name: getTemplateName(baseName),
+        description: createType === "item" ? itemDescription.trim() || null : locDescription.trim() || null,
+        location_type: createType === "location" ? locType || null : null,
+        item_status: createType === "item" ? itemStatus || null : null,
+        icon_name: createType === "item" ? itemIcon || null : locIcon || null,
+        image_path: uploadedImagePath,
+        item_value: createType === "item" ? nextItemValue : null,
+        item_purchase_date: createType === "item" ? itemPurchaseDate || null : null,
+        location_value: createType === "location" ? nextLocationValue : null,
       });
 
       if (error) {
