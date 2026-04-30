@@ -74,6 +74,7 @@ export type ItemDetailData = {
 export type DashboardData = {
   locations: LocationRecord[];
   items: ItemRecord[];
+  templates: InventoryTemplateRecord[];
   topTags: TagUsageRecord[];
 };
 
@@ -205,9 +206,10 @@ export async function fetchItemDetailData(itemId: string): Promise<ItemDetailDat
 }
 
 export async function fetchDashboardData(): Promise<DashboardData> {
-  const [locationsResponse, itemsResponse, tagsResponse, itemTagsResponse, locationTagsResponse] = await Promise.all([
+  const [locationsResponse, itemsResponse, templatesResponse, tagsResponse, itemTagsResponse, locationTagsResponse] = await Promise.all([
     supabase.from<LocationRecord[]>("locations").select("*").order("name"),
     supabase.from<ItemRecord[]>("items").select("*").order("name"),
+    supabase.from<InventoryTemplateRecord[]>("inventory_templates").select("*").order("entity_type").order("name"),
     supabase.from<Tag[]>("tags").select("id, name").order("name"),
     supabase.from<Array<{ item_id: string; tag_id: string }>>("item_tags").select("item_id, tag_id"),
     supabase.from<Array<{ location_id: string; tag_id: string }>>("location_tags").select("location_id, tag_id"),
@@ -243,6 +245,7 @@ export async function fetchDashboardData(): Promise<DashboardData> {
   return {
     locations: (locationsResponse.data ?? []) as LocationRecord[],
     items: (itemsResponse.data ?? []) as ItemRecord[],
+    templates: (templatesResponse.data ?? []) as InventoryTemplateRecord[],
     topTags,
   };
 }

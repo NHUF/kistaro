@@ -89,6 +89,7 @@ export function TemplatesIndexPage({
   templates: InventoryTemplateRecord[];
 }) {
   const router = useRouter();
+  const [templates, setTemplates] = useState(initialTemplates);
   const [query, setQuery] = useState(initialQuery);
   const [createOpen, setCreateOpen] = useState(false);
   const [editTemplate, setEditTemplate] = useState<InventoryTemplateRecord | null>(null);
@@ -100,10 +101,10 @@ export function TemplatesIndexPage({
     const normalizedQuery = query.trim().toLowerCase();
 
     if (!normalizedQuery) {
-      return initialTemplates;
+      return templates;
     }
 
-    return initialTemplates.filter((template) => {
+    return templates.filter((template) => {
       return (
         template.name.toLowerCase().includes(normalizedQuery) ||
         (template.description ?? "").toLowerCase().includes(normalizedQuery) ||
@@ -112,7 +113,22 @@ export function TemplatesIndexPage({
         getItemStatusLabel(template.item_status).toLowerCase().includes(normalizedQuery)
       );
     });
-  }, [initialTemplates, query]);
+  }, [templates, query]);
+
+  async function reloadTemplates() {
+    const { data, error } = await supabase
+      .from<InventoryTemplateRecord[]>("inventory_templates")
+      .select("*")
+      .order("entity_type")
+      .order("name");
+
+    if (error) {
+      window.alert(error.message);
+      return;
+    }
+
+    setTemplates((data ?? []) as InventoryTemplateRecord[]);
+  }
 
   function updateForm(patch: Partial<TemplateFormState>) {
     setForm((current) => ({ ...current, ...patch }));
@@ -209,6 +225,7 @@ export function TemplatesIndexPage({
 
       setCreateOpen(false);
       resetForm();
+      await reloadTemplates();
       router.refresh();
     } finally {
       setBusy(false);
@@ -289,6 +306,7 @@ export function TemplatesIndexPage({
           template_id: editTemplate.id,
         },
       });
+      await reloadTemplates();
       router.refresh();
     } finally {
       setBusy(false);
@@ -327,6 +345,7 @@ export function TemplatesIndexPage({
       });
 
       setDeleteTemplate(null);
+      await reloadTemplates();
       router.refresh();
     } finally {
       setBusy(false);

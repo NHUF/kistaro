@@ -123,28 +123,6 @@ sql_literal_escape() {
   printf "%s" "$1" | sed "s/'/''/g"
 }
 
-config_complete() {
-  local required_keys=(
-    "APP_BASE_URL"
-    "APP_BIND_HOST"
-    "APP_PORT"
-    "POSTGRES_DB"
-    "POSTGRES_USER"
-    "POSTGRES_PASSWORD"
-    "POSTGRES_HOST"
-    "POSTGRES_PORT"
-    "INVENTORY_APP_PASSWORD"
-  )
-
-  for key in "${required_keys[@]}"; do
-    if [[ -z "$(read_config_value "${key}")" ]]; then
-      return 1
-    fi
-  done
-
-  return 0
-}
-
 ensure_root() {
   if [[ "${EUID}" -ne 0 ]]; then
     echo "Bitte als root oder mit sudo ausführen."
@@ -171,31 +149,8 @@ ensure_supported_os() {
   esac
 }
 
-install_system_packages() {
-  export DEBIAN_FRONTEND=noninteractive
-  run_quiet "Paketlisten werden aktualisiert" apt-get update -qq
-  run_quiet "System wird aktualisiert" apt-get upgrade -y -qq
-  run_quiet "Grundpakete werden installiert" apt-get install -y -qq ca-certificates curl git build-essential postgresql postgresql-client rsync
-}
-
-install_node() {
-  local configured_major
-  configured_major="$(read_config_value "NODE_MAJOR")"
-  configured_major="${configured_major:-22}"
-
-  if command -v node >/dev/null 2>&1; then
-    local installed_major
-    installed_major="$(node -p 'process.versions.node.split(".")[0]')"
-
-    if [[ "${installed_major}" == "${configured_major}" ]]; then
-      start_step "Node.js ${configured_major} ist bereits vorhanden"
-      done_step
-      return
-    fi
-  fi
-
-  run_quiet "Node.js ${configured_major} Quelle wird vorbereitet" bash -c "curl -fsSL 'https://deb.nodesource.com/setup_${configured_major}.x' | bash -"
-  run_quiet "Node.js ${configured_major} wird installiert" apt-get install -y -qq nodejs
+generate_secret() {
+  head -c 32 /dev/urandom 2>/dev/null | base64 | tr -d '=+/' | cut -c1-43 || true
 }
 
 prepare_config() {
@@ -205,23 +160,25 @@ prepare_config() {
   app_ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
   app_ip="${app_ip:-127.0.0.1}"
   app_url="http://${app_ip}:${app_port}"
-  app_secret="$(node "${PROJECT_ROOT}/scripts/generate-app-secret.mjs" 2>/dev/null || true)"
+  app_secret="$(generate_secret)"
   app_secret="${app_secret:-auto}"
 
-  start_step "Instanz-Konfiguration wird vorbereitet"
+  printf '\n[kistaro-installer] Willkommen bei Kistaro.\n'
+  printf '[kistaro-installer] Dieses Passwort wird für App-Freigabe und lokale Datenbank verwendet.\n'
+  printf '[kistaro-installer] Danach läuft die Installation ohne weitere Eingaben weiter.\n'
 
   if [[ -z "${INSTANCE_PASSWORD}" ]]; then
-    printf '\n[kistaro-installer] Passwort für App und Datenbank: '
+    printf '[kistaro-installer] Passwort für App und Datenbank: '
     IFS= read -r -s INSTANCE_PASSWORD
     printf '\n'
   fi
 
   if [[ -z "${INSTANCE_PASSWORD}" ]]; then
-    printf 'Fehler\n'
     echo "[kistaro-installer] Passwort darf nicht leer sein."
     exit 1
   fi
 
+  start_step "Instanz-Konfiguration wird vorbereitet"
   cat > "${CONFIG_FILE}" <<EOF
 # Kistaro Instanz-Konfiguration
 # Automatisch vom Installer erzeugt. Für die Erstinstallation muss nichts
@@ -251,9 +208,37 @@ SYSTEMD_SERVICE_NAME=kistaro
 SYSTEMD_SERVICE_USER=root
 AUTO_REBOOT_AFTER_INSTALL=false
 EOF
-
   done_step
+}
 
+install_system_packages() {
+  export DEBIAN_FRONTEND=noninteractive
+  run_quiet "Paketlisten werden aktualisiert" apt-get update -qq
+  run_quiet "System wird aktualisiert" apt-get upgrade -y -qq
+  run_quiet "Grundpakete werden installiert" apt-get install -y -qq ca-certificates curl git build-essential postgresql postgresql-client rsync
+}
+
+install_node() {
+  local configured_major
+  configured_major="$(read_config_value "NODE_MAJOR")"
+  configured_major="${configured_major:-22}"
+
+  if command -v node >/dev/null 2>&1; then
+    local installed_major
+    installed_major="$(node -p 'process.versions.node.split(".")[0]')"
+
+    if [[ "${installed_major}" == "${configured_major}" ]]; then
+      start_step "Node.js ${configured_major} ist bereits vorhanden"
+      done_step
+      return
+    fi
+  fi
+
+  run_quiet "Node.js ${configured_major} Quelle wird vorbereitet" bash -c "curl -fsSL 'https://deb.nodesource.com/setup_${configured_major}.x' | bash -"
+  run_quiet "Node.js ${configured_major} wird installiert" apt-get install -y -qq nodejs
+}
+
+write_project_config() {
   run_quiet "Projektkonfiguration wird geschrieben" bash -c "cd '${PROJECT_ROOT}' && SETUP_CONFIG_ONLY=true npm run --silent setup:instance"
 }
 
@@ -271,7 +256,7 @@ postgres_as_admin() {
 }
 
 prepare_postgres() {
-  local database_name database_user database_password
+  local database_name database_user database_password escaped_password
 
   database_name="$(read_config_value "POSTGRES_DB")"
   database_name="${database_name:-kistaro}"
@@ -285,7 +270,6 @@ prepare_postgres() {
     exit 1
   fi
 
-  local escaped_password
   escaped_password="$(sql_literal_escape "${database_password}")"
 
   run_quiet "PostgreSQL wird gestartet" systemctl restart postgresql
@@ -426,9 +410,10 @@ main() {
   : >"${LOG_FILE}"
   ensure_root
   ensure_supported_os
+  prepare_config
   install_system_packages
   install_node
-  prepare_config
+  write_project_config
   prepare_node_modules
   prepare_postgres
   build_project

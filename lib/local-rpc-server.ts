@@ -2,6 +2,7 @@ import { queryRows } from "@/lib/db";
 
 type RpcDefinition = {
   params: string[];
+  fallbackParamCounts?: number[];
   returnsRows?: boolean;
 };
 
@@ -20,6 +21,7 @@ const RPC_DEFINITIONS: Record<string, RpcDefinition> = {
       "template_item_purchase_date",
       "template_location_value",
     ],
+    fallbackParamCounts: [9],
   },
   update_inventory_template: {
     params: [
@@ -34,6 +36,7 @@ const RPC_DEFINITIONS: Record<string, RpcDefinition> = {
       "template_item_purchase_date",
       "template_location_value",
     ],
+    fallbackParamCounts: [9],
   },
   delete_inventory_template: { params: ["target_template_id"] },
   create_item_from_template: { params: ["template_id", "target_location"] },
@@ -48,6 +51,7 @@ const RPC_DEFINITIONS: Record<string, RpcDefinition> = {
       "loc_image_path",
       "loc_value",
     ],
+    fallbackParamCounts: [6],
   },
   update_location: {
     params: [
@@ -60,6 +64,7 @@ const RPC_DEFINITIONS: Record<string, RpcDefinition> = {
       "loc_image_path",
       "loc_value",
     ],
+    fallbackParamCounts: [7],
   },
   move_location: { params: ["loc_id", "new_parent"] },
   delete_location: { params: ["loc_id", "strategy"] },
@@ -74,6 +79,7 @@ const RPC_DEFINITIONS: Record<string, RpcDefinition> = {
       "item_purchase_date",
       "item_status",
     ],
+    fallbackParamCounts: [4],
   },
   update_item_details: {
     params: [
@@ -128,25 +134,46 @@ export async function executeLocalRpc<T = unknown>(name: string, params: Record<
       throw new Error(`RPC ist nicht registriert: ${name}`);
     }
 
-    const values = definition.params.map((paramName) => params[paramName] ?? null);
-    const placeholders = definition.params.map((_, index) => `$${index + 1}`).join(", ");
     const functionName = quoteFunctionName(name);
+    const paramCounts = [definition.params.length, ...(definition.fallbackParamCounts ?? [])];
+    let lastError: unknown = null;
 
-    if (definition.returnsRows) {
-      const rows = await queryRows<T & Record<string, unknown>>(
-        `select * from public.${functionName}(${placeholders})`,
-        values,
-      );
+    for (const paramCount of paramCounts) {
+      const values = definition.params
+        .slice(0, paramCount)
+        .map((paramName) => params[paramName] ?? null);
+      const placeholders = values.map((_, index) => `$${index + 1}`).join(", ");
 
-      return { data: rows as T, error: null };
+      try {
+        if (definition.returnsRows) {
+          const rows = await queryRows<T & Record<string, unknown>>(
+            `select * from public.${functionName}(${placeholders})`,
+            values,
+          );
+
+          return { data: rows as T, error: null };
+        }
+
+        const rows = await queryRows<{ value: T }>(
+          `select public.${functionName}(${placeholders}) as value`,
+          values,
+        );
+
+        return { data: rows[0]?.value ?? null, error: null };
+      } catch (error) {
+        lastError = error;
+
+        if (
+          paramCount === paramCounts[paramCounts.length - 1] ||
+          !(error instanceof Error) ||
+          !error.message.includes("function public.")
+        ) {
+          throw error;
+        }
+      }
     }
 
-    const rows = await queryRows<{ value: T }>(
-      `select public.${functionName}(${placeholders}) as value`,
-      values,
-    );
-
-    return { data: rows[0]?.value ?? null, error: null };
+    throw lastError;
   } catch (error) {
     return {
       data: null as T,

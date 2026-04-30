@@ -1,8 +1,9 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element */
+
 import { useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
-import Image from "next/image";
 import Link from "next/link";
 import {
   MdArrowDropDown,
@@ -54,14 +55,11 @@ export function AuthorizedShell({ children }: { children: ReactNode }) {
 
   const logo = (
     <div className="flex items-center gap-3">
-      <Image
+      <img
         src={LOGO_PATH}
         alt=""
         aria-hidden="true"
-        width={40}
-        height={40}
         className="h-10 w-10 rounded-xl object-contain"
-        priority
       />
       <h1 className="text-3xl font-semibold uppercase tracking-[0.08em] text-gray-900 dark:text-gray-100">
         Kistaro

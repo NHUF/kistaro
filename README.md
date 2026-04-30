@@ -22,7 +22,7 @@ Für eine frische Debian-12-VM als `root`:
 apt-get update -qq && apt-get install -y -qq ca-certificates curl tar sed && LATEST_TAG="$(curl -fsSL https://api.github.com/repos/NHUF/kistaro/releases/latest | sed -n 's/.*"tag_name": "\(.*\)".*/\1/p' | head -n1)" && test -n "$LATEST_TAG" && rm -rf /opt/kistaro && mkdir -p /opt/kistaro && curl -fsSL "https://github.com/NHUF/kistaro/archive/refs/tags/${LATEST_TAG}.tar.gz" | tar -xz -C /opt/kistaro --strip-components=1 && cd /opt/kistaro && bash ./deploy/proxmox/install-instance.sh
 ```
 
-Der Installer fragt nur noch ein Passwort ab. Dieses Passwort wird für die App-Freigabe und die lokale PostgreSQL-Datenbank verwendet. Die Standard-URL wird automatisch aus der ersten System-IP gebildet, zum Beispiel `http://192.168.5.229:3000`.
+Der Installer fragt direkt am Anfang ein Passwort ab, bevor Updates oder Downloads starten. Dieses Passwort wird für die App-Freigabe und die lokale PostgreSQL-Datenbank verwendet. Die Standard-URL wird automatisch aus der ersten System-IP gebildet, zum Beispiel `http://192.168.5.229:3000`.
 
 Während der Installation zeigt das Skript nur Fortschritt, den aktuellen Schritt und Fehler an. Ausführliche Details landen in `install.log`.
 

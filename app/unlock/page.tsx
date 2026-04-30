@@ -1,5 +1,6 @@
+/* eslint-disable @next/next/no-img-element */
+
 import type { Metadata } from "next";
-import Image from "next/image";
 import { hasDeviceAuthConfig } from "@/lib/device-auth";
 
 export const metadata: Metadata = {
@@ -40,13 +41,10 @@ export default async function UnlockPage({
     <div className="min-h-screen bg-[#eef3ea] px-4 py-10 text-gray-800">
       <div className="mx-auto max-w-md rounded-[2rem] bg-white p-6 shadow-sm">
         <div className="flex items-center gap-3">
-          <Image
+          <img
             src="/kistaro-logo.png"
             alt="Kistaro Logo"
-            width={48}
-            height={48}
             className="h-12 w-12 rounded-2xl object-contain"
-            priority
           />
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-400">Freigabe</p>

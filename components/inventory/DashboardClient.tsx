@@ -83,7 +83,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
   const [locations, setLocations] = useState<Location[]>(initialData.locations as Location[]);
   const [tree, setTree] = useState<Location[]>(buildTree(initialData.locations as Location[]));
   const [items, setItems] = useState<Item[]>(initialData.items as Item[]);
-  const [templates, setTemplates] = useState<InventoryTemplate[]>([]);
+  const [templates, setTemplates] = useState<InventoryTemplate[]>((initialData.templates ?? []) as InventoryTemplate[]);
   const [topTags, setTopTags] = useState<TagUsage[]>(initialData.topTags as TagUsage[]);
   const [selectedLocation, setSelectedLocation] = useState<string | null>(
     getInitialSelectedLocation(initialData.locations as Location[])
