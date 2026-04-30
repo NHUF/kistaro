@@ -3,6 +3,7 @@ import {
   changeDevicePassword,
   getDeviceAuthCookieName,
 } from "@/lib/device-auth";
+import { logSystemActivity } from "@/lib/system-activity";
 
 export const runtime = "nodejs";
 
@@ -36,6 +37,11 @@ export async function POST(request: Request) {
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: 400 });
   }
+
+  await logSystemActivity({
+    title: "System-Passwort geändert",
+    description: "Das Gerätepasswort wurde geändert und alle Geräte wurden abgemeldet.",
+  });
 
   const response = NextResponse.json({
     success: true,

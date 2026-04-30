@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { query } from "@/lib/db";
+import { logSystemActivity } from "@/lib/system-activity";
 
 function getDatabaseUrl() {
   const user = encodeURIComponent(process.env.POSTGRES_USER || "kistaro");
@@ -139,6 +139,19 @@ function runPostgresCommand(command: "pg_dump" | "psql", args: string[]) {
   return result.stdout;
 }
 
+function preCleanDatabaseForRestore() {
+  // pg_dump --clean can try to drop schema public while local extensions still
+  // depend on it. Cleaning those dependencies first keeps restore predictable.
+  runPostgresCommand("psql", [
+    "--dbname",
+    getDatabaseUrl(),
+    "--set",
+    "ON_ERROR_STOP=1",
+    "--command",
+    'drop extension if exists pgcrypto cascade; drop extension if exists "uuid-ossp" cascade;',
+  ]);
+}
+
 export async function createDatabaseBackupZip() {
   const databaseSql = runPostgresCommand("pg_dump", [
     "--dbname",
@@ -150,6 +163,12 @@ export async function createDatabaseBackupZip() {
     "--no-owner",
     "--no-privileges",
   ]);
+
+  await logSystemActivity({
+    title: "Datenbank-Backup erstellt",
+    description: "Ein lokales PostgreSQL-Backup wurde über die Systemseite erzeugt.",
+    metadata: { created_at: new Date().toISOString() },
+  });
 
   return {
     fileName: `kistaro-backup-${makeTimestamp()}.zip`,
@@ -167,9 +186,8 @@ export async function restoreDatabaseBackupReplace(databaseSql: string) {
 
   try {
     writeFileSync(sqlPath, databaseSql, "utf8");
+    preCleanDatabaseForRestore();
 
-    // The SQL file is expected to come from pg_dump --clean. This keeps restore
-    // behavior aligned with PostgreSQL itself and avoids fragile table-by-table merges.
     runPostgresCommand("psql", [
       "--dbname",
       getDatabaseUrl(),
@@ -179,20 +197,11 @@ export async function restoreDatabaseBackupReplace(databaseSql: string) {
       sqlPath,
     ]);
 
-    await query(
-      `select public.log_inventory_activity(
-        $1, $2, $3, $4, $5, $6, $7::jsonb
-      )`,
-      [
-        "system",
-        null,
-        "update",
-        "Datenbank aus Backup wiederhergestellt",
-        "Die lokale PostgreSQL-Datenbank wurde per Systemseite vollständig ersetzt.",
-        "System",
-        JSON.stringify({ restored_at: new Date().toISOString() }),
-      ],
-    ).catch(() => undefined);
+    await logSystemActivity({
+      title: "Datenbank aus Backup wiederhergestellt",
+      description: "Die lokale PostgreSQL-Datenbank wurde per Systemseite vollständig ersetzt.",
+      metadata: { restored_at: new Date().toISOString() },
+    });
   } finally {
     rmSync(tempDirectory, { recursive: true, force: true });
   }

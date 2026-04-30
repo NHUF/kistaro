@@ -38,6 +38,7 @@ export type InventoryTemplate = {
   item_value?: number | null;
   item_purchase_date?: string | null;
   location_value?: number | null;
+  links?: Array<{ label: string; url: string }> | null;
 };
 
 export type DeleteStrategy = "unpack" | "box" | "delete";

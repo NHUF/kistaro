@@ -19,7 +19,7 @@ import {
 } from "react-icons/md";
 import type { ReactNode } from "react";
 
-const LOGO_PATH = "/kistaro-logo.png";
+const LOGO_PATH = "/api/app-logo/512";
 
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: MdDashboard },

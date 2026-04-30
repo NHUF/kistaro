@@ -32,6 +32,7 @@ const ALLOWED_TABLES = new Set([
   "item_links",
   "inventory_templates",
   "inventory_activity_log",
+  "inventory_resource_links",
 ]);
 
 function assertIdentifier(value: string) {

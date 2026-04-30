@@ -41,6 +41,7 @@ type TemplateFormState = {
   itemValue: string;
   itemPurchaseDate: string;
   locationValue: string;
+  linksText: string;
 };
 
 const EMPTY_FORM: TemplateFormState = {
@@ -55,6 +56,7 @@ const EMPTY_FORM: TemplateFormState = {
   itemValue: "",
   itemPurchaseDate: "",
   locationValue: "",
+  linksText: "",
 };
 
 function getBaseName(name: string) {
@@ -83,6 +85,29 @@ function parseOptionalPrice(value: string) {
   }
 
   return parsedValue;
+}
+
+function parseLinksText(value: string) {
+  return value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [label, ...urlParts] = line.split("|").map((part) => part.trim());
+      const url = urlParts.join("|").trim();
+
+      if (!label || !url) {
+        throw new Error("Links bitte als 'Name | URL' pro Zeile angeben.");
+      }
+
+      return { label, url };
+    });
+}
+
+function stringifyLinks(links: InventoryTemplateRecord["links"]) {
+  return (links ?? [])
+    .map((link) => `${link.label} | ${link.url}`)
+    .join("\n");
 }
 
 function isUnknownLocationValueColumn(errorMessage: string) {
@@ -195,6 +220,7 @@ export function TemplatesIndexPage({
       itemValue: template.item_value?.toString() ?? "",
       itemPurchaseDate: template.item_purchase_date ?? "",
       locationValue: template.location_value?.toString() ?? "",
+      linksText: stringifyLinks(template.links),
     });
   }
 
@@ -217,10 +243,12 @@ export function TemplatesIndexPage({
 
       let nextItemValue: number | null = null;
       let nextLocationValue: number | null = null;
+      let nextLinks: Array<{ label: string; url: string }> = [];
 
       try {
         nextItemValue = form.entityType === "item" ? parseOptionalPrice(form.itemValue) : null;
         nextLocationValue = form.entityType === "location" ? parseOptionalPrice(form.locationValue) : null;
+        nextLinks = parseLinksText(form.linksText);
       } catch (error) {
         if (uploadedImagePath) {
           await removeInventoryImage(uploadedImagePath);
@@ -240,6 +268,7 @@ export function TemplatesIndexPage({
         item_value: form.entityType === "item" ? nextItemValue : null,
         item_purchase_date: form.entityType === "item" ? form.itemPurchaseDate || null : null,
         location_value: form.entityType === "location" ? nextLocationValue : null,
+        links: nextLinks,
       });
 
       if (error) {
@@ -289,10 +318,12 @@ export function TemplatesIndexPage({
 
       let nextItemValue: number | null = null;
       let nextLocationValue: number | null = null;
+      let nextLinks: Array<{ label: string; url: string }> = [];
 
       try {
         nextItemValue = form.entityType === "item" ? parseOptionalPrice(form.itemValue) : null;
         nextLocationValue = form.entityType === "location" ? parseOptionalPrice(form.locationValue) : null;
+        nextLinks = parseLinksText(form.linksText);
       } catch (error) {
         if (uploadedImagePath) {
           await removeInventoryImage(uploadedImagePath);
@@ -311,6 +342,7 @@ export function TemplatesIndexPage({
         item_value: form.entityType === "item" ? nextItemValue : null,
         item_purchase_date: form.entityType === "item" ? form.itemPurchaseDate || null : null,
         location_value: form.entityType === "location" ? nextLocationValue : null,
+        links: nextLinks,
       });
 
       if (error) {
@@ -591,6 +623,7 @@ function TemplateModal({
                 itemValue: "",
                 itemPurchaseDate: "",
                 locationValue: "",
+                linksText: "",
               })
             }
           >
@@ -603,10 +636,11 @@ function TemplateModal({
           value={form.baseName}
           onChange={(event) => onChange({ baseName: event.target.value })}
         />
-        <Input
+        <textarea
           placeholder="Beschreibung"
           value={form.description}
           onChange={(event) => onChange({ description: event.target.value })}
+          className="min-h-24 w-full rounded-md border bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-700"
         />
 
         {form.entityType === "location" ? (
@@ -682,6 +716,12 @@ function TemplateModal({
               )}
             </InventoryIconBadge>
           }
+        />
+        <textarea
+          placeholder={"Links, eine Zeile pro Link: Name | URL"}
+          value={form.linksText}
+          onChange={(event) => onChange({ linksText: event.target.value })}
+          className="min-h-24 w-full rounded-md border bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-700"
         />
         <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-500 dark:border-gray-700 dark:bg-gray-800/40 dark:text-gray-400">
           Der Name wird serverseitig immer als Vorlage gespeichert und automatisch mit <code>-0000</code> abgeschlossen.

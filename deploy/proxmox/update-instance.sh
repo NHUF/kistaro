@@ -130,18 +130,18 @@ sync_release() {
 
 build_release() {
   run_step "Node-Abhängigkeiten werden aktualisiert" \
-    bash -c "cd '${PROJECT_ROOT}' && npm install --silent"
+    bash -c "cd '${PROJECT_ROOT}' && NODE_ENV=development npm install --include=dev --silent"
   chmod +x "${PROJECT_ROOT}/node_modules/.bin/next" "${PROJECT_ROOT}/node_modules/next/dist/bin/next" 2>/dev/null || true
 
   run_step "Sichere Datenbank-Migrationen werden geprüft" \
     bash -c "cd '${PROJECT_ROOT}' && npm run --silent db:migrate"
   run_step "Produktions-Build wird erstellt" \
-    bash -c "cd '${PROJECT_ROOT}' && npm run --silent build"
+    bash -c "cd '${PROJECT_ROOT}' && NODE_ENV=production npm run --silent build"
 }
 
 restart_service() {
   if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files "${SERVICE_NAME}.service" >/dev/null 2>&1; then
-    run_step "Systemdienst ${SERVICE_NAME} wird neu gestartet" systemctl restart "${SERVICE_NAME}"
+    run_step "Systemdienst ${SERVICE_NAME} wird neu gestartet" systemctl restart --no-block "${SERVICE_NAME}"
     return
   fi
 

@@ -105,6 +105,10 @@ const RPC_DEFINITIONS: Record<string, RpcDefinition> = {
   delete_item_document: { params: ["target_document_id"] },
   attach_item_link: { params: ["source_item_id", "target_item_id"] },
   detach_item_link: { params: ["source_item_id", "target_item_id"] },
+  create_resource_link: {
+    params: ["target_entity_type", "target_entity_id", "link_label", "link_url"],
+  },
+  delete_resource_link: { params: ["target_link_id"] },
   log_inventory_activity: {
     params: [
       "event_entity_type",

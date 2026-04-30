@@ -14,6 +14,17 @@ async function isAuthorized(request: NextRequest) {
   return Boolean(expectedToken && currentToken && expectedToken === currentToken);
 }
 
+function getExternalUrl(path: string, request: NextRequest) {
+  const forwardedHost = request.headers.get("x-forwarded-host");
+  const forwardedProto = request.headers.get("x-forwarded-proto") ?? "http";
+
+  if (forwardedHost) {
+    return new URL(path, `${forwardedProto}://${forwardedHost}`);
+  }
+
+  return new URL(path, request.url);
+}
+
 export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
   const isUnlockPage = pathname === "/unlock";
@@ -28,7 +39,7 @@ export async function proxy(request: NextRequest) {
 
   if (isUnlockPage) {
     if (authorized) {
-      return NextResponse.redirect(new URL("/", request.url));
+      return NextResponse.redirect(getExternalUrl("/", request));
     }
 
     return NextResponse.next();
@@ -38,7 +49,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const unlockUrl = new URL("/unlock", request.url);
+  const unlockUrl = getExternalUrl("/unlock", request);
   const nextPath = getSafeRedirectPath(`${pathname}${search}`);
 
   if (nextPath !== "/") {

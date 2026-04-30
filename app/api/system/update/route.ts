@@ -9,6 +9,7 @@ import {
   readUpdateStatus,
   writeUpdateStatus,
 } from "@/lib/system-updates";
+import { logSystemActivity } from "@/lib/system-activity";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -66,6 +67,15 @@ export async function POST(request: Request) {
 
     mkdirSync(dirname(backupPath), { recursive: true });
     writeFileSync(backupPath, backup.buffer);
+    await logSystemActivity({
+      title: force ? "Update wird neu angewendet" : "Update gestartet",
+      description: `Kistaro ${update.latestTag} wird über die Systemseite installiert.`,
+      metadata: {
+        force,
+        target_tag: update.latestTag,
+        backup_path: backupPath,
+      },
+    });
     writeUpdateStatus({
       state: "running",
       targetTag: update.latestTag,

@@ -14,6 +14,7 @@ import {
   getMaterialIconLabel,
 } from "@/components/inventory/InventoryIcon";
 import { IconPicker } from "@/components/inventory/IconPicker";
+import { ResourceLinksManager } from "@/components/inventory/ResourceLinksManager";
 import { TagManager } from "@/components/inventory/TagManager";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -69,6 +70,7 @@ export function LocationDetailPage({
   const [items, setItems] = useState<ItemListRecord[]>(initialData.items);
   const [assignedTags, setAssignedTags] = useState(initialData.assignedTags);
   const [availableTags, setAvailableTags] = useState(initialData.availableTags);
+  const [links, setLinks] = useState(initialData.links);
 
   const [editOpen, setEditOpen] = useState(false);
   const [editName, setEditName] = useState(initialData.location?.name ?? "");
@@ -94,6 +96,7 @@ export function LocationDetailPage({
       setItems(data.items);
       setAssignedTags(data.assignedTags);
       setAvailableTags(data.availableTags);
+      setLinks(data.links);
 
       if (data.location) {
         setEditName(data.location.name);
@@ -311,17 +314,16 @@ export function LocationDetailPage({
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">
               Beschreibung
             </p>
-            <p className="mt-2 text-sm text-gray-700 dark:text-gray-200">
+            <p className="mt-2 whitespace-pre-line text-sm text-gray-700 dark:text-gray-200">
               {location.description?.trim() ? location.description : "Keine Beschreibung hinterlegt."}
             </p>
           </div>
         </section>
 
-        <TagManager
+        <ResourceLinksManager
           entityId={location.id}
           entityType="location"
-          assignedTags={assignedTags}
-          availableTags={availableTags}
+          links={links}
           onChange={reloadLocationData}
         />
 
@@ -470,6 +472,13 @@ export function LocationDetailPage({
               onChange={(event) => setEditDescription(event.target.value)}
               placeholder="Beschreibung"
               className="min-h-28 w-full rounded-md border bg-white px-3 py-2 dark:border-gray-600 dark:bg-gray-700"
+            />
+            <TagManager
+              entityId={location.id}
+              entityType="location"
+              assignedTags={assignedTags}
+              availableTags={availableTags}
+              onChange={reloadLocationData}
             />
             <div className="flex justify-between">
               <Button onClick={() => setEditOpen(false)}>Abbrechen</Button>

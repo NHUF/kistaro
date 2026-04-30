@@ -52,7 +52,9 @@ export function TagDetailPage({ initialData }: { initialData: TagDetailData }) {
                     {getItemStatusLabel(item.status)}
                   </p>
                   {item.description ? (
-                    <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">{item.description}</p>
+                    <p className="mt-2 line-clamp-2 whitespace-pre-line text-sm text-gray-600 dark:text-gray-300">
+                      {item.description}
+                    </p>
                   ) : null}
                 </Link>
               ))

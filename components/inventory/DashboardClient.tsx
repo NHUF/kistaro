@@ -78,6 +78,41 @@ function parseOptionalPrice(value: string, label = "Preis") {
   return parsedValue;
 }
 
+function parseLinksText(value: string) {
+  return value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [label, ...urlParts] = line.split("|").map((part) => part.trim());
+      const url = urlParts.join("|").trim();
+
+      if (!label || !url) {
+        throw new Error("Links bitte als 'Name | URL' pro Zeile angeben.");
+      }
+
+      return { label, url };
+    });
+}
+
+function stringifyTemplateLinks(template: InventoryTemplate | null) {
+  return (template?.links ?? [])
+    .map((link) => `${link.label} | ${link.url}`)
+    .join("\n");
+}
+
+function nextNameFromTemplate(templateName: string, existingNames: string[]) {
+  const prefix = templateName.replace(/-0000$/, "");
+  const nextNumber =
+    existingNames
+      .filter((name) => name.startsWith(prefix))
+      .map((name) => Number(name.slice(-4)))
+      .filter((value) => Number.isInteger(value))
+      .reduce((max, value) => Math.max(max, value), 0) + 1;
+
+  return `${prefix}${String(nextNumber).padStart(4, "0")}`;
+}
+
 function getTemplateName(baseName: string) {
   return `${baseName.trim().replace(/-0000$/, "")}-0000`;
 }
@@ -139,6 +174,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
   const [itemPurchaseDate, setItemPurchaseDate] = useState("");
   const [itemIcon, setItemIcon] = useState("");
   const [itemImageFile, setItemImageFile] = useState<File | null>(null);
+  const [itemLinksText, setItemLinksText] = useState("");
   const [locName, setLocName] = useState("");
   const [locParent, setLocParent] = useState<string | null>(null);
   const [locType, setLocType] = useState<LocationType | "">("");
@@ -146,6 +182,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
   const [locValue, setLocValue] = useState("");
   const [locIcon, setLocIcon] = useState("");
   const [locImageFile, setLocImageFile] = useState<File | null>(null);
+  const [locLinksText, setLocLinksText] = useState("");
 
   useEffect(() => {
     if (handledCreateIntentRef.current) {
@@ -190,6 +227,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
       setItemPurchaseDate("");
       setItemIcon("");
       setItemImageFile(null);
+      setItemLinksText("");
       setLocName("");
       setLocParent(nextType === "location" ? selectedLocation : null);
       setLocType("");
@@ -197,6 +235,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
       setLocValue("");
       setLocIcon("");
       setLocImageFile(null);
+      setLocLinksText("");
 
       if (typeof window !== "undefined") {
         window.sessionStorage.removeItem("inventory-create-intent");
@@ -262,6 +301,31 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
     return response;
   }
 
+  async function createResourceLinks(
+    entityType: "item" | "location",
+    entityId: string | null | undefined,
+    linksText: string,
+  ) {
+    if (!entityId) {
+      return;
+    }
+
+    const links = parseLinksText(linksText);
+
+    for (const link of links) {
+      const { error } = await supabase.rpc("create_resource_link", {
+        target_entity_type: entityType,
+        target_entity_id: entityId,
+        link_label: link.label,
+        link_url: link.url,
+      });
+
+      if (error) {
+        throw new Error(error.message);
+      }
+    }
+  }
+
   async function create() {
     if (createMode === "manual" && createTarget === "template") {
       const baseName = createType === "item" ? itemName.trim() : locName.trim();
@@ -273,10 +337,12 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
 
       let nextItemValue: number | null = null;
       let nextLocationValue: number | null = null;
+      let nextLinks: Array<{ label: string; url: string }> = [];
 
       try {
         nextItemValue = createType === "item" ? parseOptionalPrice(itemValue) : null;
         nextLocationValue = createType === "location" ? parseOptionalPrice(locValue) : null;
+        nextLinks = parseLinksText(createType === "item" ? itemLinksText : locLinksText);
       } catch (error) {
         window.alert(error instanceof Error ? error.message : "Preis muss eine gültige Zahl sein.");
         return;
@@ -308,6 +374,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
         item_value: createType === "item" ? nextItemValue : null,
         item_purchase_date: createType === "item" ? itemPurchaseDate || null : null,
         location_value: createType === "location" ? nextLocationValue : null,
+        links: nextLinks,
       });
 
       if (error) {
@@ -330,65 +397,8 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
       return;
     }
 
-    if (createMode === "template") {
-      if (!selectedTemplateId) {
-        window.alert("Bitte eine Vorlage wählen.");
-        return;
-      }
-
-      if (createType === "item") {
-        if (!itemLocation) {
-          window.alert("Item braucht eine Location.");
-          return;
-        }
-
-        const { error } = await supabase.rpc("create_item_from_template", {
-          template_id: selectedTemplateId,
-          target_location: itemLocation,
-        });
-
-        if (error) {
-          window.alert(error.message);
-          return;
-        }
-
-        await logInventoryActivity({
-          action: "create",
-          entityType: "item",
-          title: "Item aus Vorlage erstellt",
-          description: `Ein Item wurde aus der Vorlage erstellt.`,
-          metadata: {
-            template_id: selectedTemplateId,
-            location_id: itemLocation,
-          },
-        });
-      }
-
-      if (createType === "location") {
-        const { error } = await supabase.rpc("create_location_from_template", {
-          template_id: selectedTemplateId,
-          parent_location: locParent,
-        });
-
-        if (error) {
-          window.alert(error.message);
-          return;
-        }
-
-        await logInventoryActivity({
-          action: "create",
-          entityType: "location",
-          title: "Location aus Vorlage erstellt",
-          description: "Eine Location wurde aus der Vorlage erstellt.",
-          metadata: {
-            template_id: selectedTemplateId,
-            parent_id: locParent,
-          },
-        });
-      }
-
-      resetCreate();
-      await fetchData();
+    if (createMode === "template" && !selectedTemplateId) {
+      window.alert("Bitte eine Vorlage wählen.");
       return;
     }
 
@@ -398,15 +408,18 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
       }
 
       let nextLocationValue: number | null = null;
+      let nextLinks: Array<{ label: string; url: string }> = [];
 
       try {
         nextLocationValue = parseOptionalPrice(locValue);
+        nextLinks = parseLinksText(locLinksText);
       } catch (error) {
         window.alert(error instanceof Error ? error.message : "Preis muss eine gültige Zahl sein.");
         return;
       }
 
       let uploadedImagePath: string | null = null;
+      const templateImagePath = createMode === "template" ? selectedTemplate?.image_path ?? null : null;
 
       try {
         if (locImageFile) {
@@ -417,13 +430,13 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
         return;
       }
 
-      const { error } = await supabase.rpc("create_location", {
+      const { data: createdLocationId, error } = await supabase.rpc<string>("create_location", {
         loc_name: locName.trim(),
         loc_type: locType || null,
         parent_location: locParent,
         loc_description: locDescription.trim() || null,
         loc_icon_name: locIcon || null,
-        loc_image_path: uploadedImagePath,
+        loc_image_path: uploadedImagePath ?? templateImagePath,
         loc_value: nextLocationValue,
       });
 
@@ -435,11 +448,21 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
         return;
       }
 
+      try {
+        await createResourceLinks("location", createdLocationId, locLinksText);
+      } catch (error) {
+        window.alert(error instanceof Error ? error.message : "Links konnten nicht gespeichert werden.");
+      }
+
       await logInventoryActivity({
         action: "create",
         entityType: "location",
         title: `Location erstellt: ${locName.trim()}`,
         description: "Neue Location wurde angelegt.",
+        metadata: {
+          link_count: nextLinks.length,
+          template_id: createMode === "template" ? selectedTemplateId : null,
+        },
       });
     }
 
@@ -454,15 +477,18 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
       }
 
       let nextItemValue: number | null = null;
+      let nextLinks: Array<{ label: string; url: string }> = [];
 
       try {
         nextItemValue = parseOptionalPrice(itemValue);
+        nextLinks = parseLinksText(itemLinksText);
       } catch (error) {
         window.alert(error instanceof Error ? error.message : "Preis muss eine gültige Zahl sein.");
         return;
       }
 
       let uploadedImagePath: string | null = null;
+      const templateImagePath = createMode === "template" ? selectedTemplate?.image_path ?? null : null;
 
       try {
         if (itemImageFile) {
@@ -473,11 +499,11 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
         return;
       }
 
-      const { error } = await supabase.rpc("create_item", {
+      const { data: createdItemId, error } = await supabase.rpc<string>("create_item", {
         item_name: itemName.trim(),
         target_location: itemLocation,
         item_icon_name: itemIcon || null,
-        item_image_path: uploadedImagePath,
+        item_image_path: uploadedImagePath ?? templateImagePath,
         item_description: itemDescription.trim() || null,
         item_value: nextItemValue,
         item_purchase_date: itemPurchaseDate || null,
@@ -492,6 +518,12 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
         return;
       }
 
+      try {
+        await createResourceLinks("item", createdItemId, itemLinksText);
+      } catch (error) {
+        window.alert(error instanceof Error ? error.message : "Links konnten nicht gespeichert werden.");
+      }
+
       await logInventoryActivity({
         action: "create",
         entityType: "item",
@@ -499,6 +531,8 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
         description: "Neues Item wurde angelegt.",
         metadata: {
           location_id: itemLocation,
+          link_count: nextLinks.length,
+          template_id: createMode === "template" ? selectedTemplateId : null,
         },
       });
     }
@@ -816,6 +850,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
     setItemPurchaseDate("");
     setItemIcon("");
     setItemImageFile(null);
+    setItemLinksText("");
     setLocName("");
     setLocParent(selectedLocation);
     setLocType("");
@@ -823,6 +858,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
     setLocValue("");
     setLocIcon("");
     setLocImageFile(null);
+    setLocLinksText("");
   }
 
   function openLocationEditModal(location: Location) {
@@ -892,6 +928,34 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
   const selectedLocationName = getLocationName(selectedLocation);
   const matchingTemplates = templates.filter((template) => template.entity_type === createType);
   const selectedTemplate = matchingTemplates.find((template) => template.id === selectedTemplateId) ?? null;
+
+  useEffect(() => {
+    if (createTarget !== "object" || createMode !== "template" || !selectedTemplate) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      if (createType === "item") {
+        setItemName(nextNameFromTemplate(selectedTemplate.name, items.map((item) => item.name)));
+        setItemDescription(selectedTemplate.description ?? "");
+        setItemStatus(selectedTemplate.item_status ?? "");
+        setItemValue(selectedTemplate.item_value?.toString() ?? "");
+        setItemPurchaseDate(selectedTemplate.item_purchase_date ?? "");
+        setItemIcon(selectedTemplate.icon_name ?? "");
+        setItemLinksText(stringifyTemplateLinks(selectedTemplate));
+        return;
+      }
+
+      setLocName(nextNameFromTemplate(selectedTemplate.name, locations.map((location) => location.name)));
+      setLocDescription(selectedTemplate.description ?? "");
+      setLocType(selectedTemplate.location_type ?? "");
+      setLocValue(selectedTemplate.location_value?.toString() ?? "");
+      setLocIcon(selectedTemplate.icon_name ?? "");
+      setLocLinksText(stringifyTemplateLinks(selectedTemplate));
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [createMode, createTarget, createType, items, locations, selectedTemplate]);
 
   return (
     <div className="min-h-screen bg-[#eef3ea] text-gray-800 dark:bg-gray-950 dark:text-gray-100">
@@ -1256,6 +1320,118 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                     ))}
                   </Select>
                 )}
+                {createType === "item" ? (
+                  <>
+                    <Input
+                      placeholder="Item-Name"
+                      value={itemName}
+                      onChange={(event) => setItemName(event.target.value)}
+                    />
+                    <textarea
+                      placeholder="Beschreibung"
+                      value={itemDescription}
+                      onChange={(event) => setItemDescription(event.target.value)}
+                      className="min-h-24 w-full rounded-md border bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-700"
+                    />
+                    <Select
+                      value={itemStatus}
+                      onChange={(event) => setItemStatus((event.target.value as ItemStatus) || "")}
+                    >
+                      <option value="">Status leer lassen</option>
+                      {ITEM_STATUS_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </Select>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="Preis in EUR"
+                      value={itemValue}
+                      onChange={(event) => setItemValue(event.target.value)}
+                    />
+                    <Input
+                      type="date"
+                      value={itemPurchaseDate}
+                      onChange={(event) => setItemPurchaseDate(event.target.value)}
+                    />
+                    <IconPicker label="Item-Icon" value={itemIcon} onChange={setItemIcon} emptyLabel="Icon automatisch wählen" />
+                    <ImagePicker
+                      label="Item-Bild"
+                      currentImagePath={selectedTemplate?.image_path ?? null}
+                      pendingFile={itemImageFile}
+                      onFileChange={setItemImageFile}
+                      removeImage={false}
+                      onRemoveChange={() => undefined}
+                      fallback={
+                        <InventoryIconBadge className="h-16 w-16 rounded-3xl bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-300">
+                          <ItemStatusIcon status={itemStatus || null} iconName={itemIcon || null} className="h-8 w-8" />
+                        </InventoryIconBadge>
+                      }
+                    />
+                    <textarea
+                      placeholder="Links, eine Zeile pro Link: Name | URL"
+                      value={itemLinksText}
+                      onChange={(event) => setItemLinksText(event.target.value)}
+                      className="min-h-20 w-full rounded-md border bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-700"
+                    />
+                  </>
+                ) : (
+                  <>
+                    <Input
+                      placeholder="Location-Name"
+                      value={locName}
+                      onChange={(event) => setLocName(event.target.value)}
+                    />
+                    <textarea
+                      placeholder="Beschreibung"
+                      value={locDescription}
+                      onChange={(event) => setLocDescription(event.target.value)}
+                      className="min-h-24 w-full rounded-md border bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-700"
+                    />
+                    <Select
+                      value={locType}
+                      onChange={(event) => setLocType((event.target.value as LocationType) || "")}
+                    >
+                      <option value="">Typ leer lassen</option>
+                      {LOCATION_TYPE_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </Select>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="Preis in EUR"
+                      value={locValue}
+                      onChange={(event) => setLocValue(event.target.value)}
+                    />
+                    <IconPicker label="Location-Icon" value={locIcon} onChange={setLocIcon} emptyLabel="Icon automatisch wählen" />
+                    <ImagePicker
+                      label="Location-Bild"
+                      currentImagePath={selectedTemplate?.image_path ?? null}
+                      pendingFile={locImageFile}
+                      onFileChange={setLocImageFile}
+                      removeImage={false}
+                      onRemoveChange={() => undefined}
+                      fallback={
+                        <InventoryIconBadge className="h-16 w-16 rounded-3xl bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-300">
+                          <LocationTypeIcon type={locType || null} iconName={locIcon || null} className="h-8 w-8" />
+                        </InventoryIconBadge>
+                      }
+                    />
+                    <textarea
+                      placeholder="Links, eine Zeile pro Link: Name | URL"
+                      value={locLinksText}
+                      onChange={(event) => setLocLinksText(event.target.value)}
+                      className="min-h-20 w-full rounded-md border bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-700"
+                    />
+                  </>
+                )}
               </>
             ) : createType === "item" ? (
               <>
@@ -1265,10 +1441,11 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                   onChange={(event) => setItemName(event.target.value)}
                 />
 
-                <Input
+                <textarea
                   placeholder="Beschreibung"
                   value={itemDescription}
                   onChange={(event) => setItemDescription(event.target.value)}
+                  className="min-h-24 w-full rounded-md border bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-700"
                 />
                 <Select
                   value={itemStatus}
@@ -1293,6 +1470,12 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                   type="date"
                   value={itemPurchaseDate}
                   onChange={(event) => setItemPurchaseDate(event.target.value)}
+                />
+                <textarea
+                  placeholder="Links, eine Zeile pro Link: Name | URL"
+                  value={itemLinksText}
+                  onChange={(event) => setItemLinksText(event.target.value)}
+                  className="min-h-20 w-full rounded-md border bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-700"
                 />
 
                 {createTarget === "object" ? (
@@ -1335,10 +1518,11 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                   value={locName}
                   onChange={(event) => setLocName(event.target.value)}
                 />
-                <Input
+                <textarea
                   placeholder="Beschreibung"
                   value={locDescription}
                   onChange={(event) => setLocDescription(event.target.value)}
+                  className="min-h-24 w-full rounded-md border bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-700"
                 />
                 <Select
                   value={locType}
@@ -1358,6 +1542,12 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                   placeholder="Preis in EUR"
                   value={locValue}
                   onChange={(event) => setLocValue(event.target.value)}
+                />
+                <textarea
+                  placeholder="Links, eine Zeile pro Link: Name | URL"
+                  value={locLinksText}
+                  onChange={(event) => setLocLinksText(event.target.value)}
+                  className="min-h-20 w-full rounded-md border bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-700"
                 />
                 <IconPicker
                   label="Location-Icon"

@@ -42,7 +42,7 @@ export default async function UnlockPage({
       <div className="mx-auto max-w-md rounded-[2rem] bg-white p-6 shadow-sm">
         <div className="flex items-center gap-3">
           <img
-            src="/kistaro-logo.png"
+            src="/api/app-logo/512"
             alt="Kistaro Logo"
             className="h-12 w-12 rounded-2xl object-contain"
           />

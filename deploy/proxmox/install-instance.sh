@@ -92,6 +92,10 @@ run_quiet() {
   exit 1
 }
 
+apt_get() {
+  apt-get -o DPkg::Lock::Timeout=180 "$@"
+}
+
 read_config_value() {
   local key="$1"
 
@@ -213,9 +217,9 @@ EOF
 
 install_system_packages() {
   export DEBIAN_FRONTEND=noninteractive
-  run_quiet "Paketlisten werden aktualisiert" apt-get update -qq
-  run_quiet "System wird aktualisiert" apt-get upgrade -y -qq
-  run_quiet "Grundpakete werden installiert" apt-get install -y -qq ca-certificates curl git build-essential postgresql postgresql-client rsync
+  run_quiet "Paketlisten werden aktualisiert" apt_get update -qq
+  run_quiet "System wird aktualisiert" apt_get upgrade -y -qq
+  run_quiet "Grundpakete werden installiert" apt_get install -y -qq ca-certificates curl git build-essential postgresql postgresql-client rsync
 }
 
 install_node() {
@@ -235,7 +239,7 @@ install_node() {
   fi
 
   run_quiet "Node.js ${configured_major} Quelle wird vorbereitet" bash -c "curl -fsSL 'https://deb.nodesource.com/setup_${configured_major}.x' | bash -"
-  run_quiet "Node.js ${configured_major} wird installiert" apt-get install -y -qq nodejs
+  run_quiet "Node.js ${configured_major} wird installiert" apt_get install -y -qq nodejs
 }
 
 write_project_config() {
@@ -247,7 +251,7 @@ prepare_node_modules() {
     run_quiet "Alte node_modules werden entfernt" rm -rf "${PROJECT_ROOT}/node_modules"
   fi
 
-  run_quiet "Node-Abhängigkeiten werden installiert" bash -c "cd '${PROJECT_ROOT}' && npm install --silent"
+  run_quiet "Node-Abhängigkeiten werden installiert" bash -c "cd '${PROJECT_ROOT}' && NODE_ENV=development npm install --include=dev --silent"
   chmod +x "${PROJECT_ROOT}/node_modules/.bin/next" "${PROJECT_ROOT}/node_modules/next/dist/bin/next" 2>/dev/null || true
 }
 

@@ -52,6 +52,15 @@ export type LinkedItemRecord = {
   image_path?: string | null;
 };
 
+export type ResourceLinkRecord = {
+  id: string;
+  entity_type: "item" | "location" | "template";
+  entity_id: string;
+  label: string;
+  url: string;
+  created_at?: string;
+};
+
 export type LocationDetailData = {
   location: LocationRecord | null;
   allLocations: LocationRecord[];
@@ -59,6 +68,7 @@ export type LocationDetailData = {
   items: ItemListRecord[];
   assignedTags: Tag[];
   availableTags: Tag[];
+  links: ResourceLinkRecord[];
 };
 
 export type ItemDetailData = {
@@ -69,6 +79,7 @@ export type ItemDetailData = {
   documents: ItemDocumentRecord[];
   linkedItems: LinkedItemRecord[];
   allItems: ItemRecord[];
+  links: ResourceLinkRecord[];
 };
 
 export type DashboardData = {
@@ -106,6 +117,7 @@ export type InventoryTemplateRecord = {
   item_value?: number | null;
   item_purchase_date?: string | null;
   location_value?: number | null;
+  links?: Array<{ label: string; url: string }> | null;
   created_at?: string;
 };
 
@@ -136,6 +148,7 @@ export async function fetchLocationDetailData(locationId: string): Promise<Locat
     itemsResponse,
     locationTagsResponse,
     allTagsResponse,
+    linksResponse,
   ] = await Promise.all([
     supabase.from<LocationRecord>("locations").select("*").eq("id", locationId).maybeSingle(),
     supabase.from<LocationRecord[]>("locations").select("*").order("name"),
@@ -147,6 +160,12 @@ export async function fetchLocationDetailData(locationId: string): Promise<Locat
       .order("name"),
     supabase.from<Array<{ tag_id: string }>>("location_tags").select("tag_id").eq("location_id", locationId),
     supabase.from<Tag[]>("tags").select("id, name").order("name"),
+    supabase
+      .from<ResourceLinkRecord[]>("inventory_resource_links")
+      .select("*")
+      .eq("entity_type", "location")
+      .eq("entity_id", locationId)
+      .order("created_at", { ascending: false }),
   ]);
 
   if (locationResponse.error) {
@@ -163,6 +182,7 @@ export async function fetchLocationDetailData(locationId: string): Promise<Locat
     items: (itemsResponse.data ?? []) as ItemListRecord[],
     assignedTags: availableTags.filter((tag) => tagIds.includes(tag.id)),
     availableTags,
+    links: (linksResponse.data ?? []) as ResourceLinkRecord[],
   };
 }
 
@@ -175,6 +195,7 @@ export async function fetchItemDetailData(itemId: string): Promise<ItemDetailDat
     documentsResponse,
     linkedIdsResponse,
     allItemsResponse,
+    linksResponse,
   ] = await Promise.all([
     supabase.from<ItemRecord>("items").select("*").eq("id", itemId).maybeSingle(),
     supabase.from<Array<{ id: string; name: string }>>("locations").select("id, name").order("name"),
@@ -183,6 +204,12 @@ export async function fetchItemDetailData(itemId: string): Promise<ItemDetailDat
     supabase.from<ItemDocumentRecord[]>("item_documents").select("*").eq("item_id", itemId).order("created_at", { ascending: false }),
     supabase.from<Array<{ linked_item_id: string }>>("item_links").select("linked_item_id").eq("item_id", itemId),
     supabase.from<ItemRecord[]>("items").select("id, name, location_id, status, icon_name, image_path").order("name"),
+    supabase
+      .from<ResourceLinkRecord[]>("inventory_resource_links")
+      .select("*")
+      .eq("entity_type", "item")
+      .eq("entity_id", itemId)
+      .order("created_at", { ascending: false }),
   ]);
 
   if (itemResponse.error) {
@@ -202,6 +229,7 @@ export async function fetchItemDetailData(itemId: string): Promise<ItemDetailDat
     documents: (documentsResponse.data ?? []) as ItemDocumentRecord[],
     linkedItems: allItems.filter((entry) => linkedItemIds.has(entry.id)) as LinkedItemRecord[],
     allItems,
+    links: (linksResponse.data ?? []) as ResourceLinkRecord[],
   };
 }
 

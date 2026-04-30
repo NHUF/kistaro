@@ -15,6 +15,7 @@ import {
 } from "@/components/inventory/InventoryIcon";
 import { IconPicker } from "@/components/inventory/IconPicker";
 import { RelatedItemsManager } from "@/components/inventory/RelatedItemsManager";
+import { ResourceLinksManager } from "@/components/inventory/ResourceLinksManager";
 import { TagManager } from "@/components/inventory/TagManager";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -65,6 +66,7 @@ export function ItemDetailPage({
   const [documents, setDocuments] = useState(initialData.documents);
   const [linkedItems, setLinkedItems] = useState(initialData.linkedItems);
   const [allItems, setAllItems] = useState(initialData.allItems);
+  const [links, setLinks] = useState(initialData.links);
 
   const [editOpen, setEditOpen] = useState(false);
   const [editName, setEditName] = useState(initialData.item?.name ?? "");
@@ -91,6 +93,7 @@ export function ItemDetailPage({
       setDocuments(data.documents);
       setLinkedItems(data.linkedItems);
       setAllItems(data.allItems);
+      setLinks(data.links);
 
       if (data.item) {
         setEditName(data.item.name);
@@ -326,21 +329,20 @@ export function ItemDetailPage({
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">
               Beschreibung
             </p>
-            <p className="mt-2 text-sm text-gray-700 dark:text-gray-200">
+            <p className="mt-2 whitespace-pre-line text-sm text-gray-700 dark:text-gray-200">
               {item.description?.trim() ? item.description : "Keine Beschreibung hinterlegt."}
             </p>
           </div>
         </section>
 
-        <TagManager
+        <ItemDocumentsManager documents={documents} itemId={item.id} onChange={reloadItemData} />
+
+        <ResourceLinksManager
           entityId={item.id}
           entityType="item"
-          assignedTags={assignedTags}
-          availableTags={availableTags}
+          links={links}
           onChange={reloadItemData}
         />
-
-        <ItemDocumentsManager documents={documents} itemId={item.id} onChange={reloadItemData} />
 
         <RelatedItemsManager
           currentItem={item}
@@ -411,6 +413,13 @@ export function ItemDetailPage({
                 </option>
               ))}
             </Select>
+            <TagManager
+              entityId={item.id}
+              entityType="item"
+              assignedTags={assignedTags}
+              availableTags={availableTags}
+              onChange={reloadItemData}
+            />
             <div className="flex justify-between">
               <Button onClick={() => setEditOpen(false)}>Abbrechen</Button>
               <Button variant="primary" onClick={() => void saveItem()}>

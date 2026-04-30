@@ -192,7 +192,7 @@ function LocationHierarchyNode({
                   Icon: {getMaterialIconLabel(location.icon_name)}
                 </p>
               ) : null}
-              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              <p className="mt-1 line-clamp-2 whitespace-pre-line text-sm text-gray-500 dark:text-gray-400">
                 {location.description?.trim() ? location.description : "Keine Beschreibung"}
               </p>
             </div>
