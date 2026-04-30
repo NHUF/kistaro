@@ -62,6 +62,21 @@ type ItemCardProps = {
   onDelete: (id: string) => void;
 };
 
+function parseOptionalPrice(value: string, label = "Preis") {
+  const trimmedValue = value.trim();
+
+  if (!trimmedValue) {
+    return null;
+  }
+
+  const parsedValue = Number(trimmedValue);
+
+  if (Number.isNaN(parsedValue)) {
+    throw new Error(`${label} muss eine gültige Zahl sein.`);
+  }
+
+  return parsedValue;
+}
 
 export function DashboardClient({ initialData }: { initialData: DashboardData }) {
   const handledCreateIntentRef = useRef(false);
@@ -84,6 +99,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
   const [editLocationType, setEditLocationType] = useState<LocationType | "">("");
   const [editLocationDescription, setEditLocationDescription] = useState("");
   const [editLocationParent, setEditLocationParent] = useState<string | null>(null);
+  const [editLocationValue, setEditLocationValue] = useState("");
   const [editLocationIcon, setEditLocationIcon] = useState("");
   const [editLocationImageFile, setEditLocationImageFile] = useState<File | null>(null);
   const [editLocationRemoveImage, setEditLocationRemoveImage] = useState(false);
@@ -111,12 +127,15 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
   const [itemDescription, setItemDescription] = useState("");
   const [itemLocation, setItemLocation] = useState<string | null>(null);
   const [itemStatus, setItemStatus] = useState<ItemStatus | "">("");
+  const [itemValue, setItemValue] = useState("");
+  const [itemPurchaseDate, setItemPurchaseDate] = useState("");
   const [itemIcon, setItemIcon] = useState("");
   const [itemImageFile, setItemImageFile] = useState<File | null>(null);
   const [locName, setLocName] = useState("");
   const [locParent, setLocParent] = useState<string | null>(null);
   const [locType, setLocType] = useState<LocationType | "">("");
   const [locDescription, setLocDescription] = useState("");
+  const [locValue, setLocValue] = useState("");
   const [locIcon, setLocIcon] = useState("");
   const [locImageFile, setLocImageFile] = useState<File | null>(null);
 
@@ -159,12 +178,15 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
       setItemDescription("");
       setItemLocation(nextType === "item" ? selectedLocation : null);
       setItemStatus("");
+      setItemValue("");
+      setItemPurchaseDate("");
       setItemIcon("");
       setItemImageFile(null);
       setLocName("");
       setLocParent(nextType === "location" ? selectedLocation : null);
       setLocType("");
       setLocDescription("");
+      setLocValue("");
       setLocIcon("");
       setLocImageFile(null);
 
@@ -229,6 +251,17 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
         return;
       }
 
+      let nextItemValue: number | null = null;
+      let nextLocationValue: number | null = null;
+
+      try {
+        nextItemValue = createType === "item" ? parseOptionalPrice(itemValue) : null;
+        nextLocationValue = createType === "location" ? parseOptionalPrice(locValue) : null;
+      } catch (error) {
+        window.alert(error instanceof Error ? error.message : "Preis muss eine gültige Zahl sein.");
+        return;
+      }
+
       let uploadedImagePath: string | null = null;
 
       try {
@@ -252,8 +285,9 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
         template_item_status: createType === "item" ? itemStatus || null : null,
         template_icon_name: createType === "item" ? itemIcon || null : locIcon || null,
         template_image_path: uploadedImagePath,
-        template_item_value: null,
-        template_item_purchase_date: null,
+        template_item_value: nextItemValue,
+        template_item_purchase_date: createType === "item" ? itemPurchaseDate || null : null,
+        template_location_value: nextLocationValue,
       });
 
       if (error) {
@@ -343,6 +377,15 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
         return;
       }
 
+      let nextLocationValue: number | null = null;
+
+      try {
+        nextLocationValue = parseOptionalPrice(locValue);
+      } catch (error) {
+        window.alert(error instanceof Error ? error.message : "Preis muss eine gültige Zahl sein.");
+        return;
+      }
+
       let uploadedImagePath: string | null = null;
 
       try {
@@ -358,9 +401,10 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
         loc_name: locName.trim(),
         loc_type: locType || null,
         parent_location: locParent,
-        loc_description: null,
+        loc_description: locDescription.trim() || null,
         loc_icon_name: locIcon || null,
         loc_image_path: uploadedImagePath,
+        loc_value: nextLocationValue,
       });
 
       if (error) {
@@ -389,6 +433,15 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
         return;
       }
 
+      let nextItemValue: number | null = null;
+
+      try {
+        nextItemValue = parseOptionalPrice(itemValue);
+      } catch (error) {
+        window.alert(error instanceof Error ? error.message : "Preis muss eine gültige Zahl sein.");
+        return;
+      }
+
       let uploadedImagePath: string | null = null;
 
       try {
@@ -405,6 +458,10 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
         target_location: itemLocation,
         item_icon_name: itemIcon || null,
         item_image_path: uploadedImagePath,
+        item_description: itemDescription.trim() || null,
+        item_value: nextItemValue,
+        item_purchase_date: itemPurchaseDate || null,
+        item_status: itemStatus || null,
       });
 
       if (error) {
@@ -494,6 +551,15 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
       return;
     }
 
+    let nextLocationValue: number | null = null;
+
+    try {
+      nextLocationValue = parseOptionalPrice(editLocationValue);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Preis muss eine gültige Zahl sein.");
+      return;
+    }
+
     let uploadedImagePath: string | null = null;
     let nextImagePath = editLocationRemoveImage ? null : editLocation.image_path ?? null;
 
@@ -515,6 +581,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
       loc_description: editLocationDescription.trim() || null,
       loc_icon_name: editLocationIcon || null,
       loc_image_path: nextImagePath,
+      loc_value: nextLocationValue,
     });
 
     if (error) {
@@ -544,6 +611,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
     setEditLocationType("");
     setEditLocationDescription("");
     setEditLocationParent(null);
+    setEditLocationValue("");
     setEditLocationIcon("");
     setEditLocationImageFile(null);
     setEditLocationRemoveImage(false);
@@ -724,12 +792,15 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
     setItemDescription("");
     setItemLocation(selectedLocation);
     setItemStatus("");
+    setItemValue("");
+    setItemPurchaseDate("");
     setItemIcon("");
     setItemImageFile(null);
     setLocName("");
     setLocParent(selectedLocation);
     setLocType("");
     setLocDescription("");
+    setLocValue("");
     setLocIcon("");
     setLocImageFile(null);
   }
@@ -740,6 +811,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
     setEditLocationType(location.type ?? "");
     setEditLocationDescription(location.description ?? "");
     setEditLocationParent(location.parent_id);
+    setEditLocationValue(location.value?.toString() ?? "");
     setEditLocationIcon(location.icon_name ?? "");
     setEditLocationImageFile(null);
     setEditLocationRemoveImage(false);
@@ -776,6 +848,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
     setEditLocationType("");
     setEditLocationDescription("");
     setEditLocationParent(null);
+    setEditLocationValue("");
     setEditLocationIcon("");
     setEditLocationImageFile(null);
     setEditLocationRemoveImage(false);
@@ -1024,6 +1097,9 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                 const nextType = event.target.value as "item" | "location";
                 setCreateType(nextType);
                 setSelectedTemplateId("");
+                setItemValue("");
+                setItemPurchaseDate("");
+                setLocValue("");
               }}
             >
               <option value="item">Item</option>
@@ -1122,6 +1198,16 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                         Status: {getItemStatusLabel(selectedTemplate.item_status)}
                       </p>
                     ) : null}
+                    {createType === "item" && selectedTemplate.item_value != null ? (
+                      <p className="mt-2 text-xs text-gray-400">
+                        Preis: {selectedTemplate.item_value} EUR
+                      </p>
+                    ) : null}
+                    {createType === "location" && selectedTemplate.location_value != null ? (
+                      <p className="mt-2 text-xs text-gray-400">
+                        Preis: {selectedTemplate.location_value} EUR
+                      </p>
+                    ) : null}
                   </div>
                 ) : null}
 
@@ -1159,26 +1245,35 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                   onChange={(event) => setItemName(event.target.value)}
                 />
 
-                {createTarget === "template" ? (
-                  <>
-                    <Input
-                      placeholder="Beschreibung"
-                      value={itemDescription}
-                      onChange={(event) => setItemDescription(event.target.value)}
-                    />
-                    <Select
-                      value={itemStatus}
-                      onChange={(event) => setItemStatus((event.target.value as ItemStatus) || "")}
-                    >
-                      <option value="">Status leer lassen</option>
-                      {ITEM_STATUS_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </Select>
-                  </>
-                ) : null}
+                <Input
+                  placeholder="Beschreibung"
+                  value={itemDescription}
+                  onChange={(event) => setItemDescription(event.target.value)}
+                />
+                <Select
+                  value={itemStatus}
+                  onChange={(event) => setItemStatus((event.target.value as ItemStatus) || "")}
+                >
+                  <option value="">Status leer lassen</option>
+                  {ITEM_STATUS_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </Select>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="Preis in EUR"
+                  value={itemValue}
+                  onChange={(event) => setItemValue(event.target.value)}
+                />
+                <Input
+                  type="date"
+                  value={itemPurchaseDate}
+                  onChange={(event) => setItemPurchaseDate(event.target.value)}
+                />
 
                 {createTarget === "object" ? (
                   <Select
@@ -1208,7 +1303,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                   onRemoveChange={() => undefined}
                   fallback={
                     <InventoryIconBadge className="h-16 w-16 rounded-3xl bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-300">
-                      <ItemStatusIcon status={null} iconName={itemIcon || null} className="h-8 w-8" />
+                      <ItemStatusIcon status={itemStatus || null} iconName={itemIcon || null} className="h-8 w-8" />
                     </InventoryIconBadge>
                   }
                 />
@@ -1220,13 +1315,11 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                   value={locName}
                   onChange={(event) => setLocName(event.target.value)}
                 />
-                {createTarget === "template" ? (
-                  <Input
-                    placeholder="Beschreibung"
-                    value={locDescription}
-                    onChange={(event) => setLocDescription(event.target.value)}
-                  />
-                ) : null}
+                <Input
+                  placeholder="Beschreibung"
+                  value={locDescription}
+                  onChange={(event) => setLocDescription(event.target.value)}
+                />
                 <Select
                   value={locType}
                   onChange={(event) => setLocType((event.target.value as LocationType) || "")}
@@ -1238,6 +1331,14 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                     </option>
                   ))}
                 </Select>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="Preis in EUR"
+                  value={locValue}
+                  onChange={(event) => setLocValue(event.target.value)}
+                />
                 <IconPicker
                   label="Location-Icon"
                   value={locIcon}
@@ -1295,6 +1396,10 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
             />
             <FieldInfo label="Typ" value={getLocationTypeLabel(editLocation.type)} />
             <FieldInfo
+              label="Preis"
+              value={editLocation.value != null ? `${editLocation.value} EUR` : "Nicht hinterlegt"}
+            />
+            <FieldInfo
               label="Erstellt"
               value={editLocation.created_at ? editLocation.created_at : "Unbekannt"}
             />
@@ -1315,6 +1420,19 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
               ))}
             </Select>
             <IconPicker label="Icon" value={editLocationIcon} onChange={setEditLocationIcon} emptyLabel="Icon entfernen" />
+            <div className="space-y-1">
+              <label className="text-sm font-medium text-gray-600 dark:text-gray-300">
+                Preis in EUR
+              </label>
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="z. B. 5.00"
+                value={editLocationValue}
+                onChange={(event) => setEditLocationValue(event.target.value)}
+              />
+            </div>
             <ImagePicker
               label="Bild"
               currentImagePath={editLocation.image_path}

@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FloatingCreateButton } from "@/components/inventory/FloatingCreateButton";
@@ -41,6 +40,7 @@ type TemplateFormState = {
   removeImage: boolean;
   itemValue: string;
   itemPurchaseDate: string;
+  locationValue: string;
 };
 
 const EMPTY_FORM: TemplateFormState = {
@@ -54,6 +54,7 @@ const EMPTY_FORM: TemplateFormState = {
   removeImage: false,
   itemValue: "",
   itemPurchaseDate: "",
+  locationValue: "",
 };
 
 function getBaseName(name: string) {
@@ -62,6 +63,22 @@ function getBaseName(name: string) {
 
 function getEntityLabel(entityType: "item" | "location") {
   return entityType === "item" ? "Item-Vorlage" : "Location-Vorlage";
+}
+
+function parseOptionalPrice(value: string) {
+  const trimmedValue = value.trim();
+
+  if (!trimmedValue) {
+    return null;
+  }
+
+  const parsedValue = Number(trimmedValue);
+
+  if (Number.isNaN(parsedValue)) {
+    throw new Error("Preis muss eine gültige Zahl sein.");
+  }
+
+  return parsedValue;
 }
 
 export function TemplatesIndexPage({
@@ -123,6 +140,7 @@ export function TemplatesIndexPage({
       removeImage: false,
       itemValue: template.item_value?.toString() ?? "",
       itemPurchaseDate: template.item_purchase_date ?? "",
+      locationValue: template.location_value?.toString() ?? "",
     });
   }
 
@@ -143,6 +161,20 @@ export function TemplatesIndexPage({
         );
       }
 
+      let nextItemValue: number | null = null;
+      let nextLocationValue: number | null = null;
+
+      try {
+        nextItemValue = form.entityType === "item" ? parseOptionalPrice(form.itemValue) : null;
+        nextLocationValue = form.entityType === "location" ? parseOptionalPrice(form.locationValue) : null;
+      } catch (error) {
+        if (uploadedImagePath) {
+          await removeInventoryImage(uploadedImagePath);
+        }
+        window.alert(error instanceof Error ? error.message : "Preis muss eine gültige Zahl sein.");
+        return;
+      }
+
       const { error } = await supabase.rpc("create_inventory_template", {
         template_entity_type: form.entityType,
         base_name: form.baseName.trim(),
@@ -151,9 +183,10 @@ export function TemplatesIndexPage({
         template_item_status: form.entityType === "item" ? form.itemStatus || null : null,
         template_icon_name: form.iconName || null,
         template_image_path: uploadedImagePath,
-        template_item_value: form.entityType === "item" && form.itemValue.trim() ? Number(form.itemValue) : null,
+        template_item_value: nextItemValue,
         template_item_purchase_date:
           form.entityType === "item" ? form.itemPurchaseDate || null : null,
+        template_location_value: nextLocationValue,
       });
 
       if (error) {
@@ -200,6 +233,20 @@ export function TemplatesIndexPage({
         nextImagePath = uploadedImagePath;
       }
 
+      let nextItemValue: number | null = null;
+      let nextLocationValue: number | null = null;
+
+      try {
+        nextItemValue = form.entityType === "item" ? parseOptionalPrice(form.itemValue) : null;
+        nextLocationValue = form.entityType === "location" ? parseOptionalPrice(form.locationValue) : null;
+      } catch (error) {
+        if (uploadedImagePath) {
+          await removeInventoryImage(uploadedImagePath);
+        }
+        window.alert(error instanceof Error ? error.message : "Preis muss eine gültige Zahl sein.");
+        return;
+      }
+
       const { error } = await supabase.rpc("update_inventory_template", {
         target_template_id: editTemplate.id,
         base_name: form.baseName.trim(),
@@ -208,9 +255,10 @@ export function TemplatesIndexPage({
         template_item_status: form.entityType === "item" ? form.itemStatus || null : null,
         template_icon_name: form.iconName || null,
         template_image_path: nextImagePath,
-        template_item_value: form.entityType === "item" && form.itemValue.trim() ? Number(form.itemValue) : null,
+        template_item_value: nextItemValue,
         template_item_purchase_date:
           form.entityType === "item" ? form.itemPurchaseDate || null : null,
+        template_location_value: nextLocationValue,
       });
 
       if (error) {
@@ -290,10 +338,7 @@ export function TemplatesIndexPage({
       <div className="mx-auto max-w-6xl space-y-4 lg:space-y-6">
         <div className="flex flex-col gap-3 border-b border-gray-200 pb-4 sm:flex-row sm:items-end sm:justify-between dark:border-gray-800">
           <div>
-            <Link href="/" className="text-sm text-blue-600 dark:text-blue-400">
-              Zurück zum Dashboard
-            </Link>
-            <p className="mt-3 text-xs font-semibold uppercase tracking-[0.2em] text-gray-400">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-400">
               Zugriff
             </p>
             <h1 className="text-3xl font-semibold">Vorlagen</h1>
@@ -387,6 +432,13 @@ export function TemplatesIndexPage({
                       Kaufdatum: {template.item_purchase_date}
                     </span>
                   ) : null}
+                </div>
+              ) : null}
+              {template.entity_type === "location" && template.location_value != null ? (
+                <div className="mt-4 flex flex-wrap gap-2 text-xs text-gray-400">
+                  <span className="rounded-full bg-gray-100 px-3 py-2 dark:bg-gray-800">
+                    Preis: {template.location_value} EUR
+                  </span>
                 </div>
               ) : null}
             </article>
@@ -483,6 +535,7 @@ function TemplateModal({
                 itemStatus: "",
                 itemValue: "",
                 itemPurchaseDate: "",
+                locationValue: "",
               })
             }
           >
@@ -502,17 +555,27 @@ function TemplateModal({
         />
 
         {form.entityType === "location" ? (
-          <Select
-            value={form.locationType}
-            onChange={(event) => onChange({ locationType: (event.target.value as LocationType) || "" })}
-          >
-            <option value="">Typ offen lassen</option>
-            {LOCATION_TYPE_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </Select>
+          <>
+            <Select
+              value={form.locationType}
+              onChange={(event) => onChange({ locationType: (event.target.value as LocationType) || "" })}
+            >
+              <option value="">Typ offen lassen</option>
+              {LOCATION_TYPE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </Select>
+            <Input
+              type="number"
+              step="0.01"
+              min="0"
+              placeholder="Preis in EUR"
+              value={form.locationValue}
+              onChange={(event) => onChange({ locationValue: event.target.value })}
+            />
+          </>
         ) : (
           <>
             <Select

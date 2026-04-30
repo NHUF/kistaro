@@ -5,6 +5,7 @@ export type DashboardLocation = {
   name: string;
   parent_id: string | null;
   type: LocationType | null;
+  value?: number | null;
   icon_name?: string | null;
   image_path?: string | null;
   description?: string;
@@ -34,6 +35,9 @@ export type InventoryTemplate = {
   item_status?: ItemStatus | null;
   icon_name?: string | null;
   image_path?: string | null;
+  item_value?: number | null;
+  item_purchase_date?: string | null;
+  location_value?: number | null;
 };
 
 export type DeleteStrategy = "unpack" | "box" | "delete";

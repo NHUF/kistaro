@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { networkInterfaces } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -9,6 +10,20 @@ const __dirname = dirname(__filename);
 const projectRoot = resolve(__dirname, "..");
 const configPath = resolve(projectRoot, "install-config.txt");
 const envPath = resolve(projectRoot, ".env.local");
+
+function getDefaultBaseUrl() {
+  const interfaces = networkInterfaces();
+
+  for (const entries of Object.values(interfaces)) {
+    for (const entry of entries ?? []) {
+      if (entry.family === "IPv4" && !entry.internal) {
+        return `http://${entry.address}:3000`;
+      }
+    }
+  }
+
+  return "http://127.0.0.1:3000";
+}
 
 const template = `# Kistaro-Instanz Setup
 # Diese Datei wird beim ersten Start erzeugt.
@@ -28,7 +43,7 @@ const template = `# Kistaro-Instanz Setup
 # Hinweis: Verwende in Passwörtern vorerst kein einfaches Anführungszeichen: '
 
 APP_NAME=Kistaro
-APP_BASE_URL=http://127.0.0.1:3000
+APP_BASE_URL=${getDefaultBaseUrl()}
 APP_BIND_HOST=0.0.0.0
 APP_PORT=3000
 

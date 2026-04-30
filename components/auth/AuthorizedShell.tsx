@@ -60,13 +60,8 @@ export function AuthorizedShell({ children }: { children: ReactNode }) {
         aria-hidden="true"
         width={40}
         height={40}
-        className="hidden h-10 w-10 rounded-xl object-contain"
-        onError={(event) => {
-          event.currentTarget.classList.add("hidden");
-        }}
-        onLoad={(event) => {
-          event.currentTarget.classList.remove("hidden");
-        }}
+        className="h-10 w-10 rounded-xl object-contain"
+        priority
       />
       <h1 className="text-3xl font-semibold uppercase tracking-[0.08em] text-gray-900 dark:text-gray-100">
         Kistaro

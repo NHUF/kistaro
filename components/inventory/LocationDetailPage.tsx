@@ -38,6 +38,22 @@ function formatDate(value?: string | null) {
   return new Date(value).toLocaleString("de-DE");
 }
 
+function parseOptionalPrice(value: string) {
+  const trimmedValue = value.trim();
+
+  if (!trimmedValue) {
+    return null;
+  }
+
+  const parsedValue = Number(trimmedValue);
+
+  if (Number.isNaN(parsedValue)) {
+    throw new Error("Preis muss eine gültige Zahl sein.");
+  }
+
+  return parsedValue;
+}
+
 export function LocationDetailPage({
   initialData,
   locationId,
@@ -59,6 +75,7 @@ export function LocationDetailPage({
   const [editType, setEditType] = useState<LocationType | "">(initialData.location?.type ?? "");
   const [editDescription, setEditDescription] = useState(initialData.location?.description ?? "");
   const [editParent, setEditParent] = useState<string | null>(initialData.location?.parent_id ?? null);
+  const [editValue, setEditValue] = useState(initialData.location?.value?.toString() ?? "");
   const [editIconName, setEditIconName] = useState(initialData.location?.icon_name ?? "");
   const [editImageFile, setEditImageFile] = useState<File | null>(null);
   const [removeImage, setRemoveImage] = useState(false);
@@ -83,6 +100,7 @@ export function LocationDetailPage({
         setEditType(data.location.type ?? "");
         setEditDescription(data.location.description ?? "");
         setEditParent(data.location.parent_id);
+        setEditValue(data.location.value?.toString() ?? "");
         setEditIconName(data.location.icon_name ?? "");
         setEditImageFile(null);
         setRemoveImage(false);
@@ -107,6 +125,15 @@ export function LocationDetailPage({
       return;
     }
 
+    let nextValue: number | null = null;
+
+    try {
+      nextValue = parseOptionalPrice(editValue);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Preis muss eine gültige Zahl sein.");
+      return;
+    }
+
     let uploadedImagePath: string | null = null;
     let nextImagePath = removeImage ? null : location.image_path ?? null;
 
@@ -128,6 +155,7 @@ export function LocationDetailPage({
       loc_description: editDescription.trim() || null,
       loc_icon_name: editIconName || null,
       loc_image_path: nextImagePath,
+      loc_value: nextValue,
     });
 
     if (error) {
@@ -272,6 +300,10 @@ export function LocationDetailPage({
             <DetailField label="ID" value={location.id} />
             <DetailField label="Parent" value={parentName} />
             <DetailField label="Typ" value={getLocationTypeLabel(location.type)} />
+            <DetailField
+              label="Preis"
+              value={location.value != null ? `${location.value} EUR` : "Nicht hinterlegt"}
+            />
             <DetailField label="Erstellt" value={formatDate(location.created_at)} />
           </div>
 
@@ -394,6 +426,19 @@ export function LocationDetailPage({
               ))}
             </Select>
             <IconPicker label="Icon" value={editIconName} onChange={setEditIconName} emptyLabel="Icon entfernen" />
+            <div className="space-y-1">
+              <label className="text-sm font-medium text-gray-600 dark:text-gray-300">
+                Preis in EUR
+              </label>
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="z. B. 5.00"
+                value={editValue}
+                onChange={(event) => setEditValue(event.target.value)}
+              />
+            </div>
             <ImagePicker
               label="Bild"
               currentImagePath={location.image_path}

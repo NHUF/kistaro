@@ -8,9 +8,10 @@ CONFIG_FILE="${PROJECT_ROOT}/install-config.txt"
 ENV_FILE="${PROJECT_ROOT}/.env.local"
 SUMMARY_FILE="${PROJECT_ROOT}/instance-summary.txt"
 LOG_FILE="${PROJECT_ROOT}/install.log"
-TOTAL_STEPS=17
+TOTAL_STEPS=15
 STEP_INDEX=0
 CURRENT_STEP=""
+INSTANCE_PASSWORD="${KISTARO_INSTALL_PASSWORD:-}"
 
 progress_percent() {
   local percent=$(( STEP_INDEX * 100 / TOTAL_STEPS ))
@@ -174,7 +175,7 @@ install_system_packages() {
   export DEBIAN_FRONTEND=noninteractive
   run_quiet "Paketlisten werden aktualisiert" apt-get update -qq
   run_quiet "System wird aktualisiert" apt-get upgrade -y -qq
-  run_quiet "Grundpakete werden installiert" apt-get install -y -qq ca-certificates curl git nano build-essential postgresql postgresql-client rsync
+  run_quiet "Grundpakete werden installiert" apt-get install -y -qq ca-certificates curl git build-essential postgresql postgresql-client rsync
 }
 
 install_node() {
@@ -198,31 +199,60 @@ install_node() {
 }
 
 prepare_config() {
-  start_step "Instanz-Konfiguration wird vorbereitet"
-  (
-    echo
-    echo "== Instanz-Konfiguration wird vorbereitet =="
-    cd "${PROJECT_ROOT}" && SETUP_CONFIG_ONLY=true npm run --silent setup:instance
-  ) >>"${LOG_FILE}" 2>&1 || true
+  local app_port app_ip app_url app_secret
 
-  if [[ ! -f "${CONFIG_FILE}" ]]; then
+  app_port="3000"
+  app_ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+  app_ip="${app_ip:-127.0.0.1}"
+  app_url="http://${app_ip}:${app_port}"
+  app_secret="$(node "${PROJECT_ROOT}/scripts/generate-app-secret.mjs" 2>/dev/null || true)"
+  app_secret="${app_secret:-auto}"
+
+  start_step "Instanz-Konfiguration wird vorbereitet"
+
+  if [[ -z "${INSTANCE_PASSWORD}" ]]; then
+    printf '\n[kistaro-installer] Passwort für App und Datenbank: '
+    IFS= read -r -s INSTANCE_PASSWORD
+    printf '\n'
+  fi
+
+  if [[ -z "${INSTANCE_PASSWORD}" ]]; then
     printf 'Fehler\n'
-    echo "install-config.txt konnte nicht erstellt werden."
-    tail -n 80 "${LOG_FILE}" || true
+    echo "[kistaro-installer] Passwort darf nicht leer sein."
     exit 1
   fi
+
+  cat > "${CONFIG_FILE}" <<EOF
+# Kistaro Instanz-Konfiguration
+# Automatisch vom Installer erzeugt. Für die Erstinstallation muss nichts
+# manuell angepasst werden.
+APP_NAME=Kistaro
+APP_BASE_URL=${app_url}
+APP_BIND_HOST=0.0.0.0
+APP_PORT=${app_port}
+
+POSTGRES_DB=kistaro
+POSTGRES_USER=kistaro
+POSTGRES_PASSWORD=${INSTANCE_PASSWORD}
+POSTGRES_HOST=127.0.0.1
+POSTGRES_PORT=5432
+DATABASE_URL=
+
+INVENTORY_STORAGE_DIR=storage
+INVENTORY_APP_PASSWORD=${INSTANCE_PASSWORD}
+INVENTORY_APP_SECRET=${app_secret}
+INVENTORY_UPDATE_REPOSITORY=NHUF/kistaro
+INVENTORY_UPDATE_TOKEN=
+INVENTORY_BACKUP_DIR=storage/backups
+
+NODE_MAJOR=22
+INSTALL_SYSTEM_SERVICE=true
+SYSTEMD_SERVICE_NAME=kistaro
+SYSTEMD_SERVICE_USER=root
+AUTO_REBOOT_AFTER_INSTALL=false
+EOF
 
   done_step
-
-  if ! config_complete; then
-    log "Bitte install-config.txt jetzt ausfüllen. Danach läuft die Installation direkt weiter."
-    nano "${CONFIG_FILE}"
-  fi
-
-  if ! config_complete; then
-    echo "install-config.txt ist weiterhin unvollständig. Installation wird beendet."
-    exit 1
-  fi
 
   run_quiet "Projektkonfiguration wird geschrieben" bash -c "cd '${PROJECT_ROOT}' && SETUP_CONFIG_ONLY=true npm run --silent setup:instance"
 }

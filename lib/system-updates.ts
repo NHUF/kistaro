@@ -70,7 +70,7 @@ export function isNewerVersion(candidate: string | null, current: string) {
 }
 
 function getUpdateRepository() {
-  return process.env.INVENTORY_UPDATE_REPOSITORY?.trim() || null;
+  return process.env.INVENTORY_UPDATE_REPOSITORY?.trim() || "NHUF/kistaro";
 }
 
 function createNotConfiguredResult(currentVersion: string): UpdateCheckResult {

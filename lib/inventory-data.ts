@@ -6,6 +6,7 @@ export type LocationRecord = {
   name: string;
   parent_id: string | null;
   type: LocationType | null;
+  value?: number | null;
   icon_name?: string | null;
   image_path?: string | null;
   description?: string | null;
@@ -103,6 +104,7 @@ export type InventoryTemplateRecord = {
   image_path?: string | null;
   item_value?: number | null;
   item_purchase_date?: string | null;
+  location_value?: number | null;
   created_at?: string;
 };
 

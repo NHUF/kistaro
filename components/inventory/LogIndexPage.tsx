@@ -1,4 +1,3 @@
-import Link from "next/link";
 import type { InventoryActivityRecord } from "@/lib/inventory-data";
 
 function formatDate(value: string) {
@@ -70,10 +69,7 @@ export function LogIndexPage({ activity }: { activity: InventoryActivityRecord[]
       <div className="mx-auto max-w-6xl space-y-4 lg:space-y-6">
         <div className="flex flex-col gap-3 border-b border-gray-200 pb-4 sm:flex-row sm:items-end sm:justify-between dark:border-gray-800">
           <div>
-            <Link href="/" className="text-sm text-blue-600 dark:text-blue-400">
-              Zurück zum Dashboard
-            </Link>
-            <p className="mt-3 text-xs font-semibold uppercase tracking-[0.2em] text-gray-400">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-400">
               Verlauf
             </p>
             <h1 className="text-3xl font-semibold">Log</h1>

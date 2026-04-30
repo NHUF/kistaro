@@ -2,15 +2,16 @@
 
 Kistaro - dein lokales Inventarsystem - Ordnung für alles, was zählt.
 
-Kistaro ist eine modulare Inventar- und Organisations-App auf Basis von Next.js, React, lokaler PostgreSQL-Datenbank und lokalem Dateispeicher.
+Kistaro ist eine lokale Inventar- und Organisations-App auf Basis von Next.js, React, PostgreSQL und Dateisystem-Storage.
 
-Der aktuelle Stand deckt vor allem die Inventarisierung ab:
-- hierarchische Locations
-- Items mit Status, Tags, Bildern und Dokumenten
-- Vorlagen
-- globale Suche
-- Aktivitäts-Log
-- einfacher Geräte-Passwortschutz ohne Accounts
+## Funktionen
+
+- Hierarchische Locations mit Typ, Wert, Tags, Bildern und Detailseiten
+- Items mit Status, Wert, Kaufdatum, Tags, Bildern, Dokumenten und Verknüpfungen
+- Vorlagen für Items und Locations mit automatischer `-0000` / `0001`-Namenslogik
+- Globale Suche über Locations, Items, Tags und Status
+- Aktivitäts-Log für Änderungen
+- Einfacher Geräte-Passwortschutz ohne Benutzerkonten
 - Systemseite mit Status, Passwortwechsel, Backup, Restore und Updates
 
 ## Schnellinstallation
@@ -18,22 +19,14 @@ Der aktuelle Stand deckt vor allem die Inventarisierung ab:
 Für eine frische Debian-12-VM als `root`:
 
 ```bash
-apt-get update -qq && apt-get install -y -qq ca-certificates curl tar && rm -rf /opt/kistaro && mkdir -p /opt/kistaro && curl -fsSL https://github.com/NHUF/kistaro/archive/refs/tags/v0.1.2.tar.gz | tar -xz -C /opt/kistaro --strip-components=1 && cd /opt/kistaro && bash ./deploy/proxmox/install-instance.sh
+apt-get update -qq && apt-get install -y -qq ca-certificates curl tar sed && LATEST_TAG="$(curl -fsSL https://api.github.com/repos/NHUF/kistaro/releases/latest | sed -n 's/.*"tag_name": "\(.*\)".*/\1/p' | head -n1)" && test -n "$LATEST_TAG" && rm -rf /opt/kistaro && mkdir -p /opt/kistaro && curl -fsSL "https://github.com/NHUF/kistaro/archive/refs/tags/${LATEST_TAG}.tar.gz" | tar -xz -C /opt/kistaro --strip-components=1 && cd /opt/kistaro && bash ./deploy/proxmox/install-instance.sh
 ```
 
-Das Skript erstellt beim ersten Lauf `install-config.txt`, öffnet sie in `nano` und setzt danach die Installation automatisch fort.
+Der Installer fragt nur noch ein Passwort ab. Dieses Passwort wird für die App-Freigabe und die lokale PostgreSQL-Datenbank verwendet. Die Standard-URL wird automatisch aus der ersten System-IP gebildet, zum Beispiel `http://192.168.5.229:3000`.
 
-## Zielbild
+Während der Installation zeigt das Skript nur Fortschritt, den aktuellen Schritt und Fehler an. Ausführliche Details landen in `install.log`.
 
-Die App soll als geschlossene Instanz auf einem Proxmox-Server laufen:
-- bevorzugt in einer Debian-12-VM
-- mit lokaler PostgreSQL-Datenbank
-- mit lokalem Dateispeicher für Bilder und Dokumente
-- mit automatischem Start nach Reboot
-- mit Updates über GitHub Releases
-- mit einem einzigen Installationsbefehl
-
-## Manuelle Installation aus vorhandenem Repository
+## Installation Aus Repository
 
 Wenn das Repository bereits auf dem Zielsystem liegt:
 
@@ -42,114 +35,42 @@ bash ./deploy/proxmox/install-instance.sh
 ```
 
 Das Skript erledigt:
-- `apt-get update`
-- `apt-get upgrade`
-- Installation von Node.js
-- Installation von PostgreSQL
-- Erzeugung von `install-config.txt`
-- Öffnen der Konfiguration in `nano`
-- Schreiben von `.env.local`
-- Installation der Node-Abhängigkeiten
-- Anwendung des lokalen Datenbankschemas ohne Demo-Daten
-- Produktions-Build
-- Einrichtung eines `systemd`-Dienstes
-- Start der App
-- Ausgabe der Zugangsdaten in `instance-summary.txt`
 
-Während der Installation zeigt das Skript nur den aktuellen Schritt, einen kleinen Fortschritt und `erledigt` an. Ausführliche Ausgaben werden in `install.log` geschrieben. Wenn ein Schritt fehlschlägt, zeigt der Installer automatisch die letzten relevanten Log-Zeilen.
+- System-Update und Grundpakete
+- Node.js und PostgreSQL
+- automatische Instanz-Konfiguration
+- `.env.local`
+- Node-Abhängigkeiten
+- leere lokale PostgreSQL-Datenbank ohne Demo-Daten und ohne Standard-Vorlagen
+- Produktions-Build
+- `systemd`-Service
+- Start der App
+- Zugangsdaten in `instance-summary.txt`
 
 ## Konfiguration
 
-Die Datei `install-config.txt` wird automatisch erzeugt und enthält unter anderem:
+Der Installer erzeugt weiterhin `install-config.txt`, öffnet sie aber nicht mehr automatisch. Für die Erstinstallation wird sie vollständig befüllt.
+
+Wichtige Werte:
 
 ```txt
-APP_BASE_URL=http://127.0.0.1:3000
+APP_BASE_URL=http://<system-ip>:3000
 APP_BIND_HOST=0.0.0.0
 APP_PORT=3000
 POSTGRES_DB=kistaro
 POSTGRES_USER=kistaro
-POSTGRES_PASSWORD=
-POSTGRES_HOST=127.0.0.1
-POSTGRES_PORT=5432
-DATABASE_URL=
-INVENTORY_STORAGE_DIR=storage
-INVENTORY_APP_PASSWORD=
-INVENTORY_APP_SECRET=auto
+POSTGRES_PASSWORD=<terminal-passwort>
+INVENTORY_APP_PASSWORD=<terminal-passwort>
 INVENTORY_UPDATE_REPOSITORY=NHUF/kistaro
-INVENTORY_UPDATE_TOKEN=
-INVENTORY_BACKUP_DIR=storage/backups
 ```
 
-Mindestens prüfen oder ausfüllen:
-- `APP_BASE_URL`: die spätere Browser-Adresse, zum Beispiel `http://192.168.5.229:3000`
-- `INVENTORY_APP_PASSWORD`: das Passwort zum Freischalten neuer Geräte
-- `POSTGRES_PASSWORD`: ein eigenes lokales Datenbank-Passwort
-- `INVENTORY_UPDATE_REPOSITORY`: GitHub Repository im Format `owner/repo`
+Spätere Anpassungen können direkt in `install-config.txt` oder `.env.local` erfolgen.
 
-Wenn `DATABASE_URL` leer bleibt, wird sie aus den `POSTGRES_*`-Werten erzeugt. Für das öffentliche Kistaro-Repository bleibt `INVENTORY_UPDATE_TOKEN` leer.
+## Updates
 
-## Lokale Datenbank
+Neue Versionen werden als GitHub Release veröffentlicht. Die Systemseite kann nach Updates suchen und diese installieren.
 
-Das lokale Schema wird mit diesem Befehl angewendet:
-
-```bash
-npm run db:setup
-```
-
-Das Skript `scripts/apply-local-schema.mjs` verwendet die vorhandenen Migrationen, filtert Supabase-spezifische Rollen, Grants und Storage-Policies heraus und lässt die Demo-Datenmigration bewusst aus:
-
-```txt
-supabase/migrations/20260425160046_seed_sample_apartment_inventory.sql
-```
-
-Damit startet eine neue lokale Installation leer. Wichtig: `npm run db:setup` ist destruktiv und nur für Neuinstallation oder Reset gedacht.
-
-Für Updates gibt es einen getrennten, nicht-destruktiven Pfad:
-
-```bash
-npm run db:migrate
-```
-
-## Storage
-
-Bilder und Dokumente liegen lokal unter:
-
-```txt
-storage/uploads/
-```
-
-Der Pfad kann über `INVENTORY_STORAGE_DIR` geändert werden. Der komplette `storage/`-Ordner wird nicht versioniert.
-
-## Logo
-
-Ein eigenes Logo kann unter diesem Pfad abgelegt werden:
-
-```txt
-public/kistaro-logo.png
-```
-
-Nach einem Build oder Update erscheint es automatisch in der Seitenleiste und in der mobilen Kopfzeile. Empfohlen ist ein quadratisches PNG mit transparentem Hintergrund, zum Beispiel `512x512`.
-
-## Backup und Restore
-
-Die Systemseite bietet:
-- Datenbank-Backup herunterladen
-- Backup hochladen
-- Restore-Modus: `Ersetzen`
-
-Das Backup ist eine `.zip` mit:
-
-```txt
-database.sql
-```
-
-Intern wird dafür `pg_dump` verwendet. Beim Restore wird `psql` verwendet.
-
-## Updates über GitHub Releases
-
-Neue Versionen werden als GitHub Release veröffentlicht. Die Systemseite kann die neueste Release-Version prüfen und ein Update starten.
-
-Konfiguration in `install-config.txt` oder `.env.local`:
+Konfiguration:
 
 ```txt
 INVENTORY_UPDATE_REPOSITORY=NHUF/kistaro
@@ -158,28 +79,59 @@ INVENTORY_BACKUP_DIR=storage/backups
 ```
 
 Der Update-Ablauf:
-- Die Systemseite fragt GitHub Releases ab.
-- Vor der Installation wird automatisch ein Datenbank-Backup erstellt.
-- Das neue Release wird geladen und in die bestehende Installation synchronisiert.
-- `.env.local`, `storage/`, `install-config.txt`, Logs und `node_modules` werden nicht aus dem Release überschrieben.
-- Danach werden Abhängigkeiten aktualisiert, sichere DB-Migrationen geprüft, der Build erstellt und der Dienst neu gestartet.
+
+- Prüfen des neuesten GitHub Releases
+- automatisches Datenbank-Backup
+- Download und Synchronisation der neuen Version
+- `.env.local`, `storage/`, `install-config.txt`, Logs und `node_modules` bleiben erhalten
+- sichere lokale DB-Migrationen
+- neuer Build
+- Neustart des Dienstes
+
+## Datenbank
+
+Frische Installationen starten leer:
+
+```bash
+npm run db:setup
+```
+
+Dieser Befehl ist destruktiv und nur für Neuinstallation oder Reset gedacht.
+
+Für bestehende Installationen:
+
+```bash
+npm run db:migrate
+```
+
+Dieser Befehl wendet nur sichere, idempotente Update-Migrationen an.
+
+## Storage
+
+Bilder, Dokumente und Backups liegen lokal unter:
+
+```txt
+storage/
+```
+
+Der Ordner wird nicht versioniert.
+
+## Logo
+
+Das Logo liegt unter:
+
+```txt
+public/kistaro-logo.png
+```
+
+Empfohlen ist ein quadratisches PNG mit transparentem Hintergrund, zum Beispiel `512x512`.
 
 ## Entwicklung
 
 ```bash
 npm run dev
-```
-
-Im Netzwerk erreichbar:
-
-```bash
-npm run dev:network
-```
-
-Produktions-Build:
-
-```bash
 npm run build
+npm run lint
 ```
 
 ## Wichtige Dateien
@@ -196,4 +148,4 @@ npm run build
 
 ## Technischer Hinweis
 
-Die UI nutzt vorübergehend weiterhin den Importnamen `supabase` aus `lib/supabase.ts`. Das ist kein echter Supabase-Client mehr, sondern ein lokaler Adapter. Dadurch bleiben bestehende Komponenten stabil, während die App intern auf PostgreSQL und Dateisystem umgestellt ist.
+Die UI nutzt vorübergehend weiterhin den Importnamen `supabase` aus `lib/supabase.ts`. Das ist kein echter Supabase-Client mehr, sondern ein lokaler Adapter. Dadurch bleiben bestehende Komponenten stabil, während Kistaro intern lokal mit PostgreSQL und Dateisystem arbeitet.

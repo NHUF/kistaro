@@ -26,10 +26,7 @@ export default async function SearchPage({
     <div className="min-h-screen bg-gray-100 px-3 py-4 text-gray-800 dark:bg-gray-950 dark:text-gray-100 sm:px-4 lg:px-6">
       <div className="mx-auto max-w-6xl space-y-4 lg:space-y-6">
         <div className="border-b border-gray-200 pb-4 dark:border-gray-800">
-          <Link href="/" className="text-sm text-blue-600 dark:text-blue-400">
-            Zurück zum Dashboard
-          </Link>
-          <p className="mt-3 text-xs font-semibold uppercase tracking-[0.2em] text-gray-400">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-400">
             Suche
           </p>
           <h1 className="text-3xl font-semibold">Alle Treffer</h1>
