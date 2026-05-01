@@ -22,6 +22,7 @@ import {
   toResourceLinkDrafts,
   type ResourceLinkDraft,
 } from "@/components/inventory/ResourceLinksEditor";
+import { SectionErrorBoundary } from "@/components/inventory/SectionErrorBoundary";
 import { TagManager } from "@/components/inventory/TagManager";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -128,6 +129,17 @@ export function ItemDetailPage({
 
     return locations.find((location) => location.id === item.location_id)?.name ?? "Unbekannt";
   }, [item, locations]);
+
+  const safeAssignedTags = Array.isArray(assignedTags)
+    ? assignedTags.filter((tag) => tag && typeof tag.id === "string" && typeof tag.name === "string")
+    : [];
+  const safeAvailableTags = Array.isArray(availableTags)
+    ? availableTags.filter((tag) => tag && typeof tag.id === "string" && typeof tag.name === "string")
+    : [];
+  const safeDocuments = Array.isArray(documents) ? documents.filter(Boolean) : [];
+  const safeLinkedItems = Array.isArray(linkedItems) ? linkedItems.filter(Boolean) : [];
+  const safeAllItems = Array.isArray(allItems) ? allItems.filter(Boolean) : [];
+  const safeLinks = Array.isArray(links) ? links.filter(Boolean) : [];
 
   async function saveItem() {
     if (!item) {
@@ -404,8 +416,8 @@ export function ItemDetailPage({
                 Einordnung
               </p>
               <div className="mt-4 flex flex-wrap gap-2">
-                {assignedTags.length > 0 ? (
-                  assignedTags.map((tag) => (
+                {safeAssignedTags.length > 0 ? (
+                  safeAssignedTags.map((tag) => (
                     <Link
                       key={tag.id}
                       href={`/tags/${tag.id}`}
@@ -422,17 +434,32 @@ export function ItemDetailPage({
           </div>
         </section>
 
-        <ItemDocumentsManager documents={documents} itemId={item.id} onChange={reloadItemData} />
+        <SectionErrorBoundary
+          fallbackTitle="Dokumente"
+          fallbackDescription="Der Dokumentbereich dieses Items konnte nicht geladen werden."
+        >
+          <ItemDocumentsManager documents={safeDocuments} itemId={item.id} onChange={reloadItemData} />
+        </SectionErrorBoundary>
 
-        <ResourceLinksList links={links} />
+        <SectionErrorBoundary
+          fallbackTitle="Links"
+          fallbackDescription="Die externen Verweise dieses Items konnten nicht geladen werden."
+        >
+          <ResourceLinksList links={safeLinks} />
+        </SectionErrorBoundary>
 
-        <RelatedItemsManager
-          currentItem={item}
-          linkedItems={linkedItems}
-          locations={locations}
-          selectableItems={allItems}
-          onChange={reloadItemData}
-        />
+        <SectionErrorBoundary
+          fallbackTitle="Verknuepfte Items"
+          fallbackDescription="Die Verknuepfungen dieses Items konnten nicht geladen werden."
+        >
+          <RelatedItemsManager
+            currentItem={item}
+            linkedItems={safeLinkedItems}
+            locations={locations}
+            selectableItems={safeAllItems}
+            onChange={reloadItemData}
+          />
+        </SectionErrorBoundary>
       </div>
 
       {editOpen ? (
@@ -498,17 +525,17 @@ export function ItemDetailPage({
             <TagManager
               entityId={item.id}
               entityType="item"
-              assignedTags={assignedTags}
-              availableTags={availableTags}
+              assignedTags={safeAssignedTags}
+              availableTags={safeAvailableTags}
               onChange={reloadItemData}
             />
             <ResourceLinksEditor value={editLinks} onChange={setEditLinks} />
             <div className="flex justify-between">
               <Button
                 onClick={() => {
-                  setEditLinks(toResourceLinkDrafts(links));
-                  setEditOpen(false);
-                }}
+                    setEditLinks(toResourceLinkDrafts(safeLinks));
+                    setEditOpen(false);
+                  }}
               >
                 Abbrechen
               </Button>
