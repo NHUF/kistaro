@@ -1,3 +1,4 @@
+import { uptime } from "node:os";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { hasDeviceAuthConfig } from "@/lib/device-auth";
@@ -19,6 +20,8 @@ export type SystemStatusData = {
   tagCount: number;
   templateCount: number;
   lastCheckedAt: string;
+  uptimeSeconds: number;
+  bootedAt: string;
 };
 
 function readAppVersion() {
@@ -43,6 +46,7 @@ async function countTable(tableName: string) {
 
 export async function fetchSystemStatusData(): Promise<SystemStatusData> {
   const fileConfig = readSystemConfig();
+  const uptimeSeconds = Math.max(0, Math.floor(uptime()));
   let databaseConnected = false;
   let itemCount = 0;
   let locationCount = 0;
@@ -81,5 +85,7 @@ export async function fetchSystemStatusData(): Promise<SystemStatusData> {
     tagCount,
     templateCount,
     lastCheckedAt: new Date().toISOString(),
+    uptimeSeconds,
+    bootedAt: new Date(Date.now() - uptimeSeconds * 1000).toISOString(),
   };
 }

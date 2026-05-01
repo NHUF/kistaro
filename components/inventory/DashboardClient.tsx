@@ -2173,6 +2173,14 @@ function LocationNode({
 }
 
 function ItemCard({ item, locationLabel, onEdit, onMove, onDelete }: ItemCardProps) {
+  function handleActionClick(action: () => void) {
+    return (event: MouseEvent<HTMLButtonElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      action();
+    };
+  }
+
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
       <div className="flex items-start gap-3">
@@ -2206,13 +2214,13 @@ function ItemCard({ item, locationLabel, onEdit, onMove, onDelete }: ItemCardPro
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2 border-t border-gray-100 pt-3 dark:border-gray-700">
-        <Button variant="ghost" onClick={() => onEdit(item)}>
+        <Button variant="ghost" onClick={handleActionClick(() => onEdit(item))}>
           Bearbeiten
         </Button>
-        <Button variant="ghost" onClick={() => onMove(item.id)}>
+        <Button variant="ghost" onClick={handleActionClick(() => onMove(item.id))}>
           Verschieben
         </Button>
-        <Button variant="danger" onClick={() => onDelete(item.id)}>
+        <Button variant="danger" onClick={handleActionClick(() => onDelete(item.id))}>
           Löschen
         </Button>
       </div>

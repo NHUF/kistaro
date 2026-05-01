@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { MdCloudDone, MdDataset, MdDownload, MdKey, MdOpenInNew, MdOutlineStorage, MdRefresh, MdSecurity, MdSystemUpdateAlt, MdUploadFile } from "react-icons/md";
+import { MdCloudDone, MdDataset, MdDownload, MdKey, MdOpenInNew, MdOutlineStorage, MdPowerSettingsNew, MdRefresh, MdSecurity, MdSystemUpdateAlt, MdUploadFile } from "react-icons/md";
 import type { IntegrityReport } from "@/lib/system-integrity-types";
 import type { SystemStatusData } from "@/lib/system-status";
 import type { UpdateCheckResult } from "@/lib/system-updates";
@@ -31,6 +31,27 @@ export function SystemPage({ status }: Props) {
   const [restorePending, startRestoreTransition] = useTransition();
   const [updatePending, startUpdateTransition] = useTransition();
   const [integrityPending, startIntegrityTransition] = useTransition();
+  const [rebootPending, startRebootTransition] = useTransition();
+
+  function formatDateTime(value: string) {
+    return new Date(value).toLocaleString("de-DE");
+  }
+
+  function formatUptime(seconds: number) {
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor((seconds % 86400) / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+
+    if (days > 0) {
+      return `${days}d ${hours}h ${minutes}m`;
+    }
+
+    if (hours > 0) {
+      return `${hours}h ${minutes}m`;
+    }
+
+    return `${Math.max(minutes, 1)}m`;
+  }
 
   function handlePasswordChange(field: keyof typeof passwordForm, value: string) {
     setPasswordForm((current) => ({
@@ -281,6 +302,30 @@ export function SystemPage({ status }: Props) {
     });
   }
 
+  async function rebootSystem() {
+    if (!window.confirm("Soll das System jetzt wirklich neu gestartet werden?")) {
+      return;
+    }
+
+    setUpdateMessage(null);
+
+    startRebootTransition(async () => {
+      const response = await fetch("/api/system/reboot", {
+        method: "POST",
+      });
+      const result = (await response.json()) as { error?: string; message?: string };
+
+      if (!response.ok) {
+        setUpdateMessage(result.error ?? "Neustart konnte nicht ausgelöst werden.");
+        return;
+      }
+
+      setUpdateMessage(
+        result.message ?? "Neustart wird ausgelöst. Die Verbindung kann gleich kurz unterbrochen werden.",
+      );
+    });
+  }
+
   useEffect(() => {
     if (!updatePolling) {
       return;
@@ -346,6 +391,13 @@ export function SystemPage({ status }: Props) {
       icon: MdCloudDone,
       accent: "text-gray-800 dark:text-gray-100",
     },
+    {
+      label: "Läuft seit",
+      value: formatDateTime(status.bootedAt),
+      meta: `Uptime: ${formatUptime(status.uptimeSeconds)}`,
+      icon: MdPowerSettingsNew,
+      accent: "text-violet-700 dark:text-violet-300",
+    },
   ];
 
   const metrics = [
@@ -366,7 +418,7 @@ export function SystemPage({ status }: Props) {
           </p>
         </div>
 
-        <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
           {statusCards.map((card) => {
             const Icon = card.icon;
 
@@ -577,6 +629,15 @@ export function SystemPage({ status }: Props) {
               >
                 <MdSystemUpdateAlt className="h-4 w-4" />
                 Neu anwenden
+              </button>
+              <button
+                type="button"
+                onClick={rebootSystem}
+                disabled={rebootPending}
+                className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-medium text-red-700 shadow-sm transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200 dark:hover:bg-red-950"
+              >
+                <MdPowerSettingsNew className="h-4 w-4" />
+                {rebootPending ? "Neustart..." : "System neu starten"}
               </button>
             </div>
           </div>
