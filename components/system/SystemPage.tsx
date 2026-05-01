@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { MdCloudDone, MdDataset, MdDownload, MdKey, MdOpenInNew, MdOutlineStorage, MdRefresh, MdSecurity, MdSystemUpdateAlt, MdUploadFile } from "react-icons/md";
+import type { IntegrityReport } from "@/lib/system-integrity-types";
 import type { SystemStatusData } from "@/lib/system-status";
 import type { UpdateCheckResult } from "@/lib/system-updates";
 
@@ -23,9 +24,13 @@ export function SystemPage({ status }: Props) {
   const [updateMessage, setUpdateMessage] = useState<string | null>(null);
   const [updatePolling, setUpdatePolling] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [integrityReport, setIntegrityReport] = useState<IntegrityReport | null>(null);
+  const [integrityMessage, setIntegrityMessage] = useState<string | null>(null);
+  const [repairTargets, setRepairTargets] = useState<Record<string, string>>({});
   const [passwordPending, startPasswordTransition] = useTransition();
   const [restorePending, startRestoreTransition] = useTransition();
   const [updatePending, startUpdateTransition] = useTransition();
+  const [integrityPending, startIntegrityTransition] = useTransition();
 
   function handlePasswordChange(field: keyof typeof passwordForm, value: string) {
     setPasswordForm((current) => ({
@@ -182,6 +187,96 @@ export function SystemPage({ status }: Props) {
         result.message ??
           `${force ? "Neuinstallation" : "Update"} auf Version ${result.targetVersion ?? "neu"} wurde gestartet.`,
       );
+    });
+  }
+
+  async function checkIntegrity() {
+    setIntegrityMessage(null);
+
+    startIntegrityTransition(async () => {
+      const response = await fetch("/api/system/integrity", {
+        method: "GET",
+        cache: "no-store",
+      });
+      const result = (await response.json()) as IntegrityReport & { error?: string };
+
+      if (!response.ok) {
+        setIntegrityMessage(result.error ?? "Integritaetspruefung ist fehlgeschlagen.");
+        return;
+      }
+
+      setIntegrityReport(result);
+      setIntegrityMessage(
+        result.issueCount > 0
+          ? `${result.issueCount} Auffaelligkeiten gefunden.`
+          : "Keine defekten Eintraege gefunden.",
+      );
+    });
+  }
+
+  async function repairIssue(issueId: string) {
+    setIntegrityMessage(null);
+
+    startIntegrityTransition(async () => {
+      const response = await fetch("/api/system/integrity", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "repair",
+          issueId,
+          targetLocationId: repairTargets[issueId] || null,
+        }),
+      });
+      const result = (await response.json()) as {
+        error?: string;
+        message?: string;
+        report?: IntegrityReport;
+      };
+
+      if (!response.ok) {
+        setIntegrityMessage(result.error ?? "Defekt konnte nicht repariert werden.");
+        return;
+      }
+
+      if (result.report) {
+        setIntegrityReport(result.report);
+      }
+
+      setIntegrityMessage(result.message ?? "Defekt wurde repariert.");
+    });
+  }
+
+  async function repairAllSafeIssues() {
+    setIntegrityMessage(null);
+
+    startIntegrityTransition(async () => {
+      const response = await fetch("/api/system/integrity", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "repair_all_safe",
+        }),
+      });
+      const result = (await response.json()) as {
+        error?: string;
+        message?: string;
+        report?: IntegrityReport;
+      };
+
+      if (!response.ok) {
+        setIntegrityMessage(result.error ?? "Automatische Reparatur ist fehlgeschlagen.");
+        return;
+      }
+
+      if (result.report) {
+        setIntegrityReport(result.report);
+      }
+
+      setIntegrityMessage(result.message ?? "Reparatur abgeschlossen.");
     });
   }
 
@@ -569,6 +664,138 @@ export function SystemPage({ status }: Props) {
             <p className="mt-4 rounded-xl bg-gray-100 px-3 py-2 text-sm text-gray-700 dark:bg-gray-800 dark:text-gray-200">
               {updateMessage}
             </p>
+          ) : null}
+        </section>
+
+        <section className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex items-center gap-3">
+              <span className="rounded-2xl bg-red-100 p-3 dark:bg-red-950/40">
+                <MdSecurity className="h-6 w-6 text-red-700 dark:text-red-300" />
+              </span>
+              <div>
+                <h2 className="text-lg font-semibold">Datenintegritaet</h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Prueft defekte Beziehungen und hilft beim Reparieren problematischer Eintraege.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={checkIntegrity}
+                disabled={integrityPending}
+                className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100 dark:hover:bg-gray-800"
+              >
+                <MdRefresh className="h-4 w-4" />
+                {integrityPending ? "Pruefe..." : "Integritaet pruefen"}
+              </button>
+              <button
+                type="button"
+                onClick={repairAllSafeIssues}
+                disabled={integrityPending || !integrityReport || integrityReport.repairableCount === 0}
+                className="inline-flex items-center gap-2 rounded-xl bg-red-700 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Sichere Reparaturen anwenden
+              </button>
+            </div>
+          </div>
+
+          {integrityMessage ? (
+            <p className="mt-4 rounded-xl bg-gray-100 px-3 py-2 text-sm text-gray-700 dark:bg-gray-800 dark:text-gray-200">
+              {integrityMessage}
+            </p>
+          ) : null}
+
+          {integrityReport ? (
+            <div className="mt-5 space-y-4">
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-2xl bg-gray-50 px-4 py-3 dark:bg-gray-800/70">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">Gefunden</p>
+                  <p className="mt-2 text-2xl font-semibold">{integrityReport.issueCount}</p>
+                </div>
+                <div className="rounded-2xl bg-gray-50 px-4 py-3 dark:bg-gray-800/70">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">Reparierbar</p>
+                  <p className="mt-2 text-2xl font-semibold">{integrityReport.repairableCount}</p>
+                </div>
+                <div className="rounded-2xl bg-gray-50 px-4 py-3 dark:bg-gray-800/70">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">Geprueft</p>
+                  <p className="mt-2 text-sm font-medium">
+                    {new Date(integrityReport.checkedAt).toLocaleString("de-DE")}
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                {integrityReport.issues.length > 0 ? (
+                  integrityReport.issues.map((issue) => (
+                    <article
+                      key={issue.id}
+                      className={`rounded-2xl border p-4 shadow-sm ${
+                        issue.severity === "error"
+                          ? "border-red-200 bg-red-50 dark:border-red-950 dark:bg-red-950/20"
+                          : "border-amber-200 bg-amber-50 dark:border-amber-950 dark:bg-amber-950/20"
+                      }`}
+                    >
+                      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">
+                            {issue.entityType} | {issue.severity}
+                          </p>
+                          <h3 className="mt-2 text-lg font-semibold">{issue.title}</h3>
+                          <p className="mt-2 text-sm text-gray-700 dark:text-gray-200">
+                            {issue.description}
+                          </p>
+                          <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                            ID: {issue.entityId}
+                          </p>
+                        </div>
+
+                        <div className="flex min-w-[16rem] flex-col gap-2">
+                          {issue.repairMode === "reassign_item_location" ? (
+                            <select
+                              value={repairTargets[issue.id] ?? ""}
+                              onChange={(event) =>
+                                setRepairTargets((current) => ({
+                                  ...current,
+                                  [issue.id]: event.target.value,
+                                }))
+                              }
+                              className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm shadow-sm dark:border-gray-700 dark:bg-gray-950"
+                            >
+                              <option value="">Ziel-Location waehlen</option>
+                              {integrityReport.locations.map((location) => (
+                                <option key={location.id} value={location.id}>
+                                  {location.name}
+                                </option>
+                              ))}
+                            </select>
+                          ) : null}
+
+                          <button
+                            type="button"
+                            onClick={() => void repairIssue(issue.id)}
+                            disabled={
+                              integrityPending ||
+                              issue.repairMode === "none" ||
+                              (issue.repairMode === "reassign_item_location" && !repairTargets[issue.id])
+                            }
+                            className="inline-flex items-center justify-center rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200"
+                          >
+                            {issue.repairMode === "none" ? "Manuell pruefen" : "Defekt reparieren"}
+                          </button>
+                        </div>
+                      </div>
+                    </article>
+                  ))
+                ) : (
+                  <p className="rounded-2xl bg-green-50 px-4 py-4 text-sm text-green-800 dark:bg-green-950/30 dark:text-green-200">
+                    Keine defekten Eintraege gefunden.
+                  </p>
+                )}
+              </div>
+            </div>
           ) : null}
         </section>
 
