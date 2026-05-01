@@ -12,6 +12,12 @@ import {
   LocationTypeIcon,
   getMaterialIconLabel,
 } from "@/components/inventory/InventoryIcon";
+import {
+  ResourceLinksEditor,
+  normalizeResourceLinkDrafts,
+  toResourceLinkDrafts,
+  type ResourceLinkDraft,
+} from "@/components/inventory/ResourceLinksEditor";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
@@ -41,7 +47,7 @@ type TemplateFormState = {
   itemValue: string;
   itemPurchaseDate: string;
   locationValue: string;
-  linksText: string;
+  links: ResourceLinkDraft[];
 };
 
 const EMPTY_FORM: TemplateFormState = {
@@ -56,7 +62,7 @@ const EMPTY_FORM: TemplateFormState = {
   itemValue: "",
   itemPurchaseDate: "",
   locationValue: "",
-  linksText: "",
+  links: [],
 };
 
 function getBaseName(name: string) {
@@ -85,29 +91,6 @@ function parseOptionalPrice(value: string) {
   }
 
   return parsedValue;
-}
-
-function parseLinksText(value: string) {
-  return value
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const [label, ...urlParts] = line.split("|").map((part) => part.trim());
-      const url = urlParts.join("|").trim();
-
-      if (!label || !url) {
-        throw new Error("Links bitte als 'Name | URL' pro Zeile angeben.");
-      }
-
-      return { label, url };
-    });
-}
-
-function stringifyLinks(links: InventoryTemplateRecord["links"]) {
-  return (links ?? [])
-    .map((link) => `${link.label} | ${link.url}`)
-    .join("\n");
 }
 
 function isUnknownLocationValueColumn(errorMessage: string) {
@@ -207,7 +190,6 @@ export function TemplatesIndexPage({
   }
 
   function openEditModal(template: InventoryTemplateRecord) {
-    setEditTemplate(template);
     setForm({
       entityType: template.entity_type,
       baseName: getBaseName(template.name),
@@ -220,8 +202,9 @@ export function TemplatesIndexPage({
       itemValue: template.item_value?.toString() ?? "",
       itemPurchaseDate: template.item_purchase_date ?? "",
       locationValue: template.location_value?.toString() ?? "",
-      linksText: stringifyLinks(template.links),
+      links: toResourceLinkDrafts(template.links),
     });
+    setEditTemplate(template);
   }
 
   async function createTemplate() {
@@ -248,7 +231,7 @@ export function TemplatesIndexPage({
       try {
         nextItemValue = form.entityType === "item" ? parseOptionalPrice(form.itemValue) : null;
         nextLocationValue = form.entityType === "location" ? parseOptionalPrice(form.locationValue) : null;
-        nextLinks = parseLinksText(form.linksText);
+        nextLinks = normalizeResourceLinkDrafts(form.links);
       } catch (error) {
         if (uploadedImagePath) {
           await removeInventoryImage(uploadedImagePath);
@@ -323,7 +306,7 @@ export function TemplatesIndexPage({
       try {
         nextItemValue = form.entityType === "item" ? parseOptionalPrice(form.itemValue) : null;
         nextLocationValue = form.entityType === "location" ? parseOptionalPrice(form.locationValue) : null;
-        nextLinks = parseLinksText(form.linksText);
+        nextLinks = normalizeResourceLinkDrafts(form.links);
       } catch (error) {
         if (uploadedImagePath) {
           await removeInventoryImage(uploadedImagePath);
@@ -555,6 +538,7 @@ export function TemplatesIndexPage({
           currentImagePath={editTemplate.image_path}
           form={form}
           lockEntityType
+          lockedEntityType={editTemplate.entity_type}
           onCancel={() => {
             setEditTemplate(null);
             resetForm();
@@ -590,6 +574,7 @@ function TemplateModal({
   currentImagePath = null,
   form,
   lockEntityType = false,
+  lockedEntityType,
   onCancel,
   onChange,
   onSubmit,
@@ -599,6 +584,7 @@ function TemplateModal({
   currentImagePath?: string | null;
   form: TemplateFormState;
   lockEntityType?: boolean;
+  lockedEntityType?: "item" | "location";
   onCancel: () => void;
   onChange: (patch: Partial<TemplateFormState>) => void;
   onSubmit: () => void;
@@ -610,7 +596,7 @@ function TemplateModal({
         <h3 className="text-lg font-semibold">{title}</h3>
         {lockEntityType ? (
           <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-sm text-gray-600 dark:border-gray-700 dark:bg-gray-800/60 dark:text-gray-300">
-            Typ: <span className="font-medium">{getEntityLabel(form.entityType)}</span>
+            Typ: <span className="font-medium">{getEntityLabel(lockedEntityType ?? form.entityType)}</span>
           </div>
         ) : (
           <Select
@@ -623,7 +609,7 @@ function TemplateModal({
                 itemValue: "",
                 itemPurchaseDate: "",
                 locationValue: "",
-                linksText: "",
+                links: [],
               })
             }
           >
@@ -717,12 +703,7 @@ function TemplateModal({
             </InventoryIconBadge>
           }
         />
-        <textarea
-          placeholder={"Links, eine Zeile pro Link: Name | URL"}
-          value={form.linksText}
-          onChange={(event) => onChange({ linksText: event.target.value })}
-          className="min-h-24 w-full rounded-md border bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-700"
-        />
+        <ResourceLinksEditor value={form.links} onChange={(links) => onChange({ links })} />
         <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-500 dark:border-gray-700 dark:bg-gray-800/40 dark:text-gray-400">
           Der Name wird serverseitig immer als Vorlage gespeichert und automatisch mit <code>-0000</code> abgeschlossen.
         </div>

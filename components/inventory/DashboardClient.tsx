@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
-import { MdSettings } from "react-icons/md";
+import { MdExpandMore, MdKeyboardArrowRight, MdSettings } from "react-icons/md";
 import { supabase } from "@/lib/supabase";
 
 import { buildTree, flattenTree, getInitialSelectedLocation } from "@/components/inventory/dashboard-utils";
@@ -23,11 +23,17 @@ import {
   getMaterialIconLabel,
 } from "@/components/inventory/InventoryIcon";
 import { IconPicker } from "@/components/inventory/IconPicker";
+import {
+  ResourceLinksEditor,
+  normalizeResourceLinkDrafts,
+  toResourceLinkDrafts,
+  type ResourceLinkDraft,
+} from "@/components/inventory/ResourceLinksEditor";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
-import type { DashboardData } from "@/lib/inventory-data";
+import type { DashboardData, ResourceLinkRecord } from "@/lib/inventory-data";
 import { removeInventoryImage, uploadInventoryImage } from "@/lib/inventory-media";
 import { logInventoryActivity } from "@/lib/inventory-activity";
 import {
@@ -51,6 +57,8 @@ type LocationNodeProps = {
   onMove: (id: string) => void;
   onDelete: (id: string) => void;
   onEdit: (location: Location) => void;
+  expandedLocations: Set<string>;
+  onToggleExpanded: (id: string) => void;
   showActions?: boolean;
 };
 
@@ -76,29 +84,6 @@ function parseOptionalPrice(value: string, label = "Preis") {
   }
 
   return parsedValue;
-}
-
-function parseLinksText(value: string) {
-  return value
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const [label, ...urlParts] = line.split("|").map((part) => part.trim());
-      const url = urlParts.join("|").trim();
-
-      if (!label || !url) {
-        throw new Error("Links bitte als 'Name | URL' pro Zeile angeben.");
-      }
-
-      return { label, url };
-    });
-}
-
-function stringifyTemplateLinks(template: InventoryTemplate | null) {
-  return (template?.links ?? [])
-    .map((link) => `${link.label} | ${link.url}`)
-    .join("\n");
 }
 
 function nextNameFromTemplate(templateName: string, existingNames: string[]) {
@@ -131,6 +116,9 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
   const [selectedLocation, setSelectedLocation] = useState<string | null>(
     getInitialSelectedLocation(initialData.locations as Location[])
   );
+  const [expandedLocations, setExpandedLocations] = useState<Set<string>>(
+    () => new Set((initialData.locations as Location[]).filter((location) => !location.parent_id).map((location) => location.id))
+  );
   const [dashboardQuery, setDashboardQuery] = useState("");
 
   const [moveLocationId, setMoveLocationId] = useState<string | null>(null);
@@ -146,6 +134,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
   const [editLocationIcon, setEditLocationIcon] = useState("");
   const [editLocationImageFile, setEditLocationImageFile] = useState<File | null>(null);
   const [editLocationRemoveImage, setEditLocationRemoveImage] = useState(false);
+  const [editLocationLinks, setEditLocationLinks] = useState<ResourceLinkDraft[]>([]);
 
   const [editItem, setEditItem] = useState<Item | null>(null);
   const [editItemName, setEditItemName] = useState("");
@@ -157,6 +146,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
   const [editItemIcon, setEditItemIcon] = useState("");
   const [editItemImageFile, setEditItemImageFile] = useState<File | null>(null);
   const [editItemRemoveImage, setEditItemRemoveImage] = useState(false);
+  const [editItemLinks, setEditItemLinks] = useState<ResourceLinkDraft[]>([]);
   const [moveItemId, setMoveItemId] = useState<string | null>(null);
   const [moveItemTarget, setMoveItemTarget] = useState<string | null>(null);
   const [deleteItemId, setDeleteItemId] = useState<string | null>(null);
@@ -174,7 +164,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
   const [itemPurchaseDate, setItemPurchaseDate] = useState("");
   const [itemIcon, setItemIcon] = useState("");
   const [itemImageFile, setItemImageFile] = useState<File | null>(null);
-  const [itemLinksText, setItemLinksText] = useState("");
+  const [itemLinks, setItemLinks] = useState<ResourceLinkDraft[]>([]);
   const [locName, setLocName] = useState("");
   const [locParent, setLocParent] = useState<string | null>(null);
   const [locType, setLocType] = useState<LocationType | "">("");
@@ -182,7 +172,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
   const [locValue, setLocValue] = useState("");
   const [locIcon, setLocIcon] = useState("");
   const [locImageFile, setLocImageFile] = useState<File | null>(null);
-  const [locLinksText, setLocLinksText] = useState("");
+  const [locLinks, setLocLinks] = useState<ResourceLinkDraft[]>([]);
 
   useEffect(() => {
     if (handledCreateIntentRef.current) {
@@ -227,7 +217,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
       setItemPurchaseDate("");
       setItemIcon("");
       setItemImageFile(null);
-      setItemLinksText("");
+      setItemLinks([]);
       setLocName("");
       setLocParent(nextType === "location" ? selectedLocation : null);
       setLocType("");
@@ -235,7 +225,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
       setLocValue("");
       setLocIcon("");
       setLocImageFile(null);
-      setLocLinksText("");
+      setLocLinks([]);
 
       if (typeof window !== "undefined") {
         window.sessionStorage.removeItem("inventory-create-intent");
@@ -287,6 +277,15 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
         ? current
         : nextLocations.find((location) => !location.parent_id)?.id ?? nextLocations[0]?.id ?? null;
     });
+    setExpandedLocations((current) => {
+      const nextExpanded = new Set(current);
+
+      nextLocations
+        .filter((location) => !location.parent_id)
+        .forEach((location) => nextExpanded.add(location.id));
+
+      return nextExpanded;
+    });
   }
 
   async function insertTemplate(payload: Partial<InventoryTemplate>) {
@@ -304,13 +303,13 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
   async function createResourceLinks(
     entityType: "item" | "location",
     entityId: string | null | undefined,
-    linksText: string,
+    linkDrafts: ResourceLinkDraft[],
   ) {
     if (!entityId) {
       return;
     }
 
-    const links = parseLinksText(linksText);
+    const links = normalizeResourceLinkDrafts(linkDrafts);
 
     for (const link of links) {
       const { error } = await supabase.rpc("create_resource_link", {
@@ -324,6 +323,53 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
         throw new Error(error.message);
       }
     }
+  }
+
+  async function loadResourceLinks(entityType: "item" | "location", entityId: string) {
+    const { data, error } = await supabase
+      .from<ResourceLinkRecord[]>("inventory_resource_links")
+      .select("*")
+      .eq("entity_type", entityType)
+      .eq("entity_id", entityId)
+      .order("created_at");
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return toResourceLinkDrafts(data ?? []);
+  }
+
+  async function replaceResourceLinks(entityType: "item" | "location", entityId: string, linkDrafts: ResourceLinkDraft[]) {
+    const links = normalizeResourceLinkDrafts(linkDrafts);
+    const deleteResponse = await supabase
+      .from<ResourceLinkRecord[]>("inventory_resource_links")
+      .delete()
+      .eq("entity_type", entityType)
+      .eq("entity_id", entityId);
+
+    if (deleteResponse.error) {
+      throw new Error(deleteResponse.error.message);
+    }
+
+    if (links.length === 0) {
+      return 0;
+    }
+
+    const { error } = await supabase.from<ResourceLinkRecord[]>("inventory_resource_links").insert(
+      links.map((link) => ({
+        entity_type: entityType,
+        entity_id: entityId,
+        label: link.label,
+        url: link.url,
+      }))
+    );
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return links.length;
   }
 
   async function create() {
@@ -342,7 +388,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
       try {
         nextItemValue = createType === "item" ? parseOptionalPrice(itemValue) : null;
         nextLocationValue = createType === "location" ? parseOptionalPrice(locValue) : null;
-        nextLinks = parseLinksText(createType === "item" ? itemLinksText : locLinksText);
+        nextLinks = normalizeResourceLinkDrafts(createType === "item" ? itemLinks : locLinks);
       } catch (error) {
         window.alert(error instanceof Error ? error.message : "Preis muss eine gültige Zahl sein.");
         return;
@@ -412,7 +458,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
 
       try {
         nextLocationValue = parseOptionalPrice(locValue);
-        nextLinks = parseLinksText(locLinksText);
+        nextLinks = normalizeResourceLinkDrafts(locLinks);
       } catch (error) {
         window.alert(error instanceof Error ? error.message : "Preis muss eine gültige Zahl sein.");
         return;
@@ -449,7 +495,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
       }
 
       try {
-        await createResourceLinks("location", createdLocationId, locLinksText);
+        await createResourceLinks("location", createdLocationId, locLinks);
       } catch (error) {
         window.alert(error instanceof Error ? error.message : "Links konnten nicht gespeichert werden.");
       }
@@ -481,7 +527,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
 
       try {
         nextItemValue = parseOptionalPrice(itemValue);
-        nextLinks = parseLinksText(itemLinksText);
+        nextLinks = normalizeResourceLinkDrafts(itemLinks);
       } catch (error) {
         window.alert(error instanceof Error ? error.message : "Preis muss eine gültige Zahl sein.");
         return;
@@ -519,7 +565,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
       }
 
       try {
-        await createResourceLinks("item", createdItemId, itemLinksText);
+        await createResourceLinks("item", createdItemId, itemLinks);
       } catch (error) {
         window.alert(error instanceof Error ? error.message : "Links konnten nicht gespeichert werden.");
       }
@@ -646,6 +692,15 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
       return;
     }
 
+    let nextLinkCount = 0;
+
+    try {
+      nextLinkCount = await replaceResourceLinks("location", editLocation.id, editLocationLinks);
+    } catch (linkError) {
+      window.alert(linkError instanceof Error ? linkError.message : "Links konnten nicht gespeichert werden.");
+      return;
+    }
+
     if (
       (editLocationRemoveImage || uploadedImagePath) &&
       editLocation.image_path &&
@@ -669,6 +724,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
     setEditLocationIcon("");
     setEditLocationImageFile(null);
     setEditLocationRemoveImage(false);
+    setEditLocationLinks([]);
     await logInventoryActivity({
       action: editLocation.parent_id !== editLocationParent ? "move" : "update",
       entityId: editLocation.id,
@@ -678,6 +734,9 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
         editLocation.parent_id !== editLocationParent
           ? `${editLocationName.trim()} wurde verschoben.`
           : "Location-Details wurden aktualisiert.",
+      metadata: {
+        link_count: nextLinkCount,
+      },
     });
     await fetchData();
   }
@@ -749,6 +808,15 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
       });
     }
 
+    let nextLinkCount = 0;
+
+    try {
+      nextLinkCount = await replaceResourceLinks("item", editItem.id, editItemLinks);
+    } catch (linkError) {
+      window.alert(linkError instanceof Error ? linkError.message : "Links konnten nicht gespeichert werden.");
+      return;
+    }
+
     if ((editItemRemoveImage || uploadedImagePath) && editItem.image_path && editItem.image_path !== nextImagePath) {
       try {
         await removeInventoryImage(editItem.image_path);
@@ -769,12 +837,16 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
     setEditItemIcon("");
     setEditItemImageFile(null);
     setEditItemRemoveImage(false);
+    setEditItemLinks([]);
     await logInventoryActivity({
       action: "update",
       entityId: editItem.id,
       entityType: "item",
       title: `Item bearbeitet: ${editItemName.trim()}`,
       description: "Item-Details wurden aktualisiert.",
+      metadata: {
+        link_count: nextLinkCount,
+      },
     });
     await fetchData();
   }
@@ -850,7 +922,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
     setItemPurchaseDate("");
     setItemIcon("");
     setItemImageFile(null);
-    setItemLinksText("");
+    setItemLinks([]);
     setLocName("");
     setLocParent(selectedLocation);
     setLocType("");
@@ -858,7 +930,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
     setLocValue("");
     setLocIcon("");
     setLocImageFile(null);
-    setLocLinksText("");
+    setLocLinks([]);
   }
 
   function openLocationEditModal(location: Location) {
@@ -871,6 +943,10 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
     setEditLocationIcon(location.icon_name ?? "");
     setEditLocationImageFile(null);
     setEditLocationRemoveImage(false);
+    setEditLocationLinks([]);
+    void loadResourceLinks("location", location.id)
+      .then(setEditLocationLinks)
+      .catch((error) => window.alert(error instanceof Error ? error.message : "Links konnten nicht geladen werden."));
   }
 
   function openItemEditModal(item: Item) {
@@ -884,6 +960,10 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
     setEditItemIcon(item.icon_name ?? "");
     setEditItemImageFile(null);
     setEditItemRemoveImage(false);
+    setEditItemLinks([]);
+    void loadResourceLinks("item", item.id)
+      .then(setEditItemLinks)
+      .catch((error) => window.alert(error instanceof Error ? error.message : "Links konnten nicht geladen werden."));
   }
 
   function getItemsForLocation(locationId: string | null) {
@@ -908,6 +988,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
     setEditLocationIcon("");
     setEditLocationImageFile(null);
     setEditLocationRemoveImage(false);
+    setEditLocationLinks([]);
   }
 
   function closeItemEditModal() {
@@ -921,6 +1002,21 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
     setEditItemIcon("");
     setEditItemImageFile(null);
     setEditItemRemoveImage(false);
+    setEditItemLinks([]);
+  }
+
+  function toggleLocationExpanded(locationId: string) {
+    setExpandedLocations((current) => {
+      const nextExpanded = new Set(current);
+
+      if (nextExpanded.has(locationId)) {
+        nextExpanded.delete(locationId);
+      } else {
+        nextExpanded.add(locationId);
+      }
+
+      return nextExpanded;
+    });
   }
 
   const flatLocations = flattenTree(tree);
@@ -942,7 +1038,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
         setItemValue(selectedTemplate.item_value?.toString() ?? "");
         setItemPurchaseDate(selectedTemplate.item_purchase_date ?? "");
         setItemIcon(selectedTemplate.icon_name ?? "");
-        setItemLinksText(stringifyTemplateLinks(selectedTemplate));
+        setItemLinks(toResourceLinkDrafts(selectedTemplate.links));
         return;
       }
 
@@ -951,7 +1047,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
       setLocType(selectedTemplate.location_type ?? "");
       setLocValue(selectedTemplate.location_value?.toString() ?? "");
       setLocIcon(selectedTemplate.icon_name ?? "");
-      setLocLinksText(stringifyTemplateLinks(selectedTemplate));
+      setLocLinks(toResourceLinkDrafts(selectedTemplate.links));
     }, 0);
 
     return () => window.clearTimeout(timeoutId);
@@ -1032,6 +1128,8 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                     onMove={setMoveLocationId}
                     onDelete={setDeleteLocationId}
                     onEdit={openLocationEditModal}
+                    expandedLocations={expandedLocations}
+                    onToggleExpanded={toggleLocationExpanded}
                     showActions={false}
                   />
                 ))
@@ -1183,7 +1281,9 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                 setSelectedTemplateId("");
                 setItemValue("");
                 setItemPurchaseDate("");
+                setItemLinks([]);
                 setLocValue("");
+                setLocLinks([]);
               }}
             >
               <option value="item">Item</option>
@@ -1371,12 +1471,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                         </InventoryIconBadge>
                       }
                     />
-                    <textarea
-                      placeholder="Links, eine Zeile pro Link: Name | URL"
-                      value={itemLinksText}
-                      onChange={(event) => setItemLinksText(event.target.value)}
-                      className="min-h-20 w-full rounded-md border bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-700"
-                    />
+                    <ResourceLinksEditor value={itemLinks} onChange={setItemLinks} />
                   </>
                 ) : (
                   <>
@@ -1424,12 +1519,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                         </InventoryIconBadge>
                       }
                     />
-                    <textarea
-                      placeholder="Links, eine Zeile pro Link: Name | URL"
-                      value={locLinksText}
-                      onChange={(event) => setLocLinksText(event.target.value)}
-                      className="min-h-20 w-full rounded-md border bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-700"
-                    />
+                    <ResourceLinksEditor value={locLinks} onChange={setLocLinks} />
                   </>
                 )}
               </>
@@ -1471,12 +1561,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                   value={itemPurchaseDate}
                   onChange={(event) => setItemPurchaseDate(event.target.value)}
                 />
-                <textarea
-                  placeholder="Links, eine Zeile pro Link: Name | URL"
-                  value={itemLinksText}
-                  onChange={(event) => setItemLinksText(event.target.value)}
-                  className="min-h-20 w-full rounded-md border bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-700"
-                />
+                <ResourceLinksEditor value={itemLinks} onChange={setItemLinks} />
 
                 {createTarget === "object" ? (
                   <Select
@@ -1543,12 +1628,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                   value={locValue}
                   onChange={(event) => setLocValue(event.target.value)}
                 />
-                <textarea
-                  placeholder="Links, eine Zeile pro Link: Name | URL"
-                  value={locLinksText}
-                  onChange={(event) => setLocLinksText(event.target.value)}
-                  className="min-h-20 w-full rounded-md border bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-700"
-                />
+                <ResourceLinksEditor value={locLinks} onChange={setLocLinks} />
                 <IconPicker
                   label="Location-Icon"
                   value={locIcon}
@@ -1684,6 +1764,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
               onChange={(event) => setEditLocationDescription(event.target.value)}
               className="min-h-24 w-full rounded-md border bg-white px-3 py-2 dark:border-gray-600 dark:bg-gray-700"
             />
+            <ResourceLinksEditor value={editLocationLinks} onChange={setEditLocationLinks} />
 
             <div className="flex justify-between">
               <Button onClick={closeLocationEditModal}>Abbrechen</Button>
@@ -1858,6 +1939,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                 ))}
               </Select>
             </div>
+            <ResourceLinksEditor value={editItemLinks} onChange={setEditItemLinks} />
 
             <div className="flex justify-between">
               <Button onClick={closeItemEditModal}>Abbrechen</Button>
@@ -1978,7 +2060,11 @@ function MenuAction({
   return (
     <button
       type="button"
-      onClick={onClick}
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onClick();
+      }}
       className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 ${className}`}
     >
       {children}
@@ -1993,11 +2079,32 @@ function LocationNode({
   onMove,
   onDelete,
   onEdit,
+  expandedLocations,
+  onToggleExpanded,
   showActions = true,
 }: LocationNodeProps) {
+  const children = location.children ?? [];
+  const hasChildren = children.length > 0;
+  const isExpanded = expandedLocations.has(location.id);
+
   return (
     <div className="ml-1.5">
       <div className="group flex items-center justify-between gap-2 rounded-lg pr-1">
+        {hasChildren ? (
+          <button
+            type="button"
+            aria-label={isExpanded ? `${location.name} einklappen` : `${location.name} ausklappen`}
+            onClick={(event) => {
+              event.stopPropagation();
+              onToggleExpanded(location.id);
+            }}
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-400 transition hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+          >
+            {isExpanded ? <MdExpandMore className="h-5 w-5" /> : <MdKeyboardArrowRight className="h-5 w-5" />}
+          </button>
+        ) : (
+          <span className="h-8 w-8 shrink-0" />
+        )}
         <button
           type="button"
           onClick={() => setSelected(location.id)}
@@ -2035,9 +2142,9 @@ function LocationNode({
         ) : null}
       </div>
 
-      {location.children?.length ? (
+      {hasChildren && isExpanded ? (
         <div className="ml-4 border-l border-gray-200 pl-3 dark:border-gray-700">
-          {location.children.map((child) => (
+          {children.map((child) => (
             <LocationNode
               key={child.id}
               location={child}
@@ -2046,6 +2153,8 @@ function LocationNode({
               onMove={onMove}
               onDelete={onDelete}
               onEdit={onEdit}
+              expandedLocations={expandedLocations}
+              onToggleExpanded={onToggleExpanded}
               showActions={showActions}
             />
           ))}

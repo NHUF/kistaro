@@ -14,7 +14,13 @@ import {
   getMaterialIconLabel,
 } from "@/components/inventory/InventoryIcon";
 import { IconPicker } from "@/components/inventory/IconPicker";
-import { ResourceLinksManager } from "@/components/inventory/ResourceLinksManager";
+import {
+  ResourceLinksEditor,
+  ResourceLinksList,
+  normalizeResourceLinkDrafts,
+  toResourceLinkDrafts,
+  type ResourceLinkDraft,
+} from "@/components/inventory/ResourceLinksEditor";
 import { TagManager } from "@/components/inventory/TagManager";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -81,6 +87,7 @@ export function LocationDetailPage({
   const [editIconName, setEditIconName] = useState(initialData.location?.icon_name ?? "");
   const [editImageFile, setEditImageFile] = useState<File | null>(null);
   const [removeImage, setRemoveImage] = useState(false);
+  const [editLinks, setEditLinks] = useState<ResourceLinkDraft[]>(toResourceLinkDrafts(initialData.links));
 
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteStrategy, setDeleteStrategy] = useState<"unpack" | "box" | "delete">("unpack");
@@ -97,6 +104,7 @@ export function LocationDetailPage({
       setAssignedTags(data.assignedTags);
       setAvailableTags(data.availableTags);
       setLinks(data.links);
+      setEditLinks(toResourceLinkDrafts(data.links));
 
       if (data.location) {
         setEditName(data.location.name);
@@ -137,6 +145,15 @@ export function LocationDetailPage({
       return;
     }
 
+    let normalizedLinks: Array<{ label: string; url: string }> = [];
+
+    try {
+      normalizedLinks = normalizeResourceLinkDrafts(editLinks);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Links konnten nicht gespeichert werden.");
+      return;
+    }
+
     let uploadedImagePath: string | null = null;
     let nextImagePath = removeImage ? null : location.image_path ?? null;
 
@@ -167,6 +184,33 @@ export function LocationDetailPage({
       }
       window.alert(error.message);
       return;
+    }
+
+    const deleteLinksResponse = await supabase
+      .from("inventory_resource_links")
+      .delete()
+      .eq("entity_type", "location")
+      .eq("entity_id", location.id);
+
+    if (deleteLinksResponse.error) {
+      window.alert(deleteLinksResponse.error.message);
+      return;
+    }
+
+    if (normalizedLinks.length > 0) {
+      const { error: linksError } = await supabase.from("inventory_resource_links").insert(
+        normalizedLinks.map((link) => ({
+          entity_type: "location",
+          entity_id: location.id,
+          label: link.label,
+          url: link.url,
+        }))
+      );
+
+      if (linksError) {
+        window.alert(linksError.message);
+        return;
+      }
     }
 
     if ((removeImage || uploadedImagePath) && location.image_path && location.image_path !== nextImagePath) {
@@ -277,7 +321,14 @@ export function LocationDetailPage({
           </div>
 
           <ActionMenu label={`Aktionen für ${location.name}`}>
-            <ActionMenuButton onClick={() => setEditOpen(true)}>Bearbeiten</ActionMenuButton>
+            <ActionMenuButton
+              onClick={() => {
+                setEditLinks(toResourceLinkDrafts(links));
+                setEditOpen(true);
+              }}
+            >
+              Bearbeiten
+            </ActionMenuButton>
             <ActionMenuButton className="text-red-500" onClick={() => setDeleteOpen(true)}>
               Löschen
             </ActionMenuButton>
@@ -289,7 +340,7 @@ export function LocationDetailPage({
             <InventoryImage
               alt={location.name}
               imagePath={location.image_path}
-              className="h-64 w-full object-cover"
+              className="h-auto w-full object-contain"
               fallback={
                 <div className="flex h-64 w-full items-center justify-center">
                   <InventoryIconBadge className="h-20 w-20 rounded-[2rem] bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-300">
@@ -320,12 +371,7 @@ export function LocationDetailPage({
           </div>
         </section>
 
-        <ResourceLinksManager
-          entityId={location.id}
-          entityType="location"
-          links={links}
-          onChange={reloadLocationData}
-        />
+        <ResourceLinksList links={links} />
 
         <div className="grid gap-6 lg:grid-cols-2">
           <section className="rounded-2xl bg-white p-5 shadow-sm dark:bg-gray-900">
@@ -480,8 +526,16 @@ export function LocationDetailPage({
               availableTags={availableTags}
               onChange={reloadLocationData}
             />
+            <ResourceLinksEditor value={editLinks} onChange={setEditLinks} />
             <div className="flex justify-between">
-              <Button onClick={() => setEditOpen(false)}>Abbrechen</Button>
+              <Button
+                onClick={() => {
+                  setEditLinks(toResourceLinkDrafts(links));
+                  setEditOpen(false);
+                }}
+              >
+                Abbrechen
+              </Button>
               <Button variant="primary" onClick={() => void saveLocation()}>
                 Speichern
               </Button>

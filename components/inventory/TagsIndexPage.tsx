@@ -22,6 +22,9 @@ export function TagsIndexPage({
   const [query, setQuery] = useState(initialQuery);
   const [createOpen, setCreateOpen] = useState(false);
   const [createName, setCreateName] = useState("");
+  const [editTag, setEditTag] = useState<TagUsageRecord | null>(null);
+  const [editName, setEditName] = useState("");
+  const [deleteTag, setDeleteTag] = useState<TagUsageRecord | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   const filteredTags = useMemo(() => {
@@ -67,6 +70,74 @@ export function TagsIndexPage({
     }
   }
 
+  async function updateTag() {
+    if (!editTag) {
+      return;
+    }
+
+    const nextName = editName.trim();
+
+    if (!nextName) {
+      window.alert("Bitte einen Tag-Namen eingeben.");
+      return;
+    }
+
+    setSubmitting(true);
+
+    try {
+      const { error } = await supabase.from("tags").update({ name: nextName }).eq("id", editTag.id);
+
+      if (error) {
+        window.alert(error.message);
+        return;
+      }
+
+      await logInventoryActivity({
+        action: "update",
+        entityId: editTag.id,
+        entityType: "tag",
+        title: `Tag bearbeitet: ${nextName}`,
+        description: `Tag wurde von "${editTag.name}" auf "${nextName}" umbenannt.`,
+      });
+
+      setEditTag(null);
+      setEditName("");
+      router.refresh();
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function removeTag() {
+    if (!deleteTag) {
+      return;
+    }
+
+    setSubmitting(true);
+
+    try {
+      const { error } = await supabase.from("tags").delete().eq("id", deleteTag.id);
+
+      if (error) {
+        window.alert(error.message);
+        return;
+      }
+
+      await logInventoryActivity({
+        action: "delete",
+        entityId: deleteTag.id,
+        entityType: "tag",
+        title: `Tag gelöscht: ${deleteTag.name}`,
+        description: "Tag und alle Zuordnungen wurden entfernt.",
+      });
+
+      setDeleteTag(null);
+      router.refresh();
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-100 px-3 py-4 text-gray-800 dark:bg-gray-950 dark:text-gray-100 sm:px-4 lg:px-6">
       <div className="mx-auto max-w-6xl space-y-4 lg:space-y-6">
@@ -95,18 +166,33 @@ export function TagsIndexPage({
 
         <section className="grid gap-3 xl:grid-cols-2">
           {filteredTags.map((tag) => (
-            <Link
+            <article
               key={tag.id}
-              href={`/tags/${tag.id}`}
               className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm transition hover:border-gray-300 hover:shadow-md dark:border-gray-800 dark:bg-gray-900 dark:hover:border-gray-700"
             >
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">Tag</p>
-              <h2 className="mt-2 text-lg font-semibold">{tag.name}</h2>
+              <Link href={`/tags/${tag.id}`} className="mt-2 block text-lg font-semibold hover:text-blue-600 dark:hover:text-blue-400">
+                {tag.name}
+              </Link>
               <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
                 {tag.item_count} Items
                 {tag.location_count ? ` | ${tag.location_count} Locations` : ""}
               </p>
-            </Link>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setEditTag(tag);
+                    setEditName(tag.name);
+                  }}
+                >
+                  Bearbeiten
+                </Button>
+                <Button variant="danger" onClick={() => setDeleteTag(tag)}>
+                  Löschen
+                </Button>
+              </div>
+            </article>
           ))}
         </section>
       </div>
@@ -132,6 +218,45 @@ export function TagsIndexPage({
               </Button>
               <Button variant="primary" onClick={() => void createTag()} disabled={submitting}>
                 {submitting ? "Speichert..." : "Erstellen"}
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      ) : null}
+
+      {editTag ? (
+        <Modal>
+          <div className="space-y-3">
+            <h3 className="text-lg font-semibold">Tag bearbeiten</h3>
+            <Input placeholder="Tag-Name" value={editName} onChange={(event) => setEditName(event.target.value)} />
+            <div className="flex justify-between">
+              <Button
+                onClick={() => {
+                  setEditTag(null);
+                  setEditName("");
+                }}
+              >
+                Abbrechen
+              </Button>
+              <Button variant="primary" onClick={() => void updateTag()} disabled={submitting}>
+                {submitting ? "Speichert..." : "Speichern"}
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      ) : null}
+
+      {deleteTag ? (
+        <Modal>
+          <div className="space-y-3">
+            <h3 className="text-lg font-semibold">Tag löschen</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              <span className="font-medium">{deleteTag.name}</span> wird entfernt. Bestehende Zuordnungen zu Items und Locations werden ebenfalls gelöst.
+            </p>
+            <div className="flex justify-between">
+              <Button onClick={() => setDeleteTag(null)}>Abbrechen</Button>
+              <Button variant="danger" onClick={() => void removeTag()} disabled={submitting}>
+                Löschen
               </Button>
             </div>
           </div>
