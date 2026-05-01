@@ -2166,7 +2166,7 @@ function LocationNode({
 
 function ItemCard({ item, locationLabel, onEdit, onMove, onDelete }: ItemCardProps) {
   return (
-    <div className="flex items-start justify-between rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
       <div className="flex items-start gap-3">
         <InventoryImage
           alt={item.name}
@@ -2197,14 +2197,17 @@ function ItemCard({ item, locationLabel, onEdit, onMove, onDelete }: ItemCardPro
         </div>
       </div>
 
-      <Menu label={`Aktionen für ${item.name}`}>
-        <MenuAction onClick={() => onEdit(item)}>Bearbeiten</MenuAction>
-        <MenuAction onClick={() => onMove(item.id)}>Verschieben</MenuAction>
-        <div className="my-1 h-px bg-gray-200 dark:bg-gray-700" />
-        <MenuAction className="text-red-500" onClick={() => onDelete(item.id)}>
+      <div className="mt-4 flex flex-wrap gap-2 border-t border-gray-100 pt-3 dark:border-gray-700">
+        <Button variant="ghost" onClick={() => onEdit(item)}>
+          Bearbeiten
+        </Button>
+        <Button variant="ghost" onClick={() => onMove(item.id)}>
+          Verschieben
+        </Button>
+        <Button variant="danger" onClick={() => onDelete(item.id)}>
           Löschen
-        </MenuAction>
-      </Menu>
+        </Button>
+      </div>
     </div>
   );
 }
