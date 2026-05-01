@@ -31,6 +31,7 @@ import {
   type LocationType,
 } from "@/lib/inventory";
 import type { InventoryTemplateRecord } from "@/lib/inventory-data";
+import { formatInventoryDate, normalizeDateInputValue } from "@/lib/inventory-dates";
 import { removeInventoryImage, uploadInventoryImage } from "@/lib/inventory-media";
 import { logInventoryActivity } from "@/lib/inventory-activity";
 import { supabase } from "@/lib/supabase";
@@ -200,7 +201,7 @@ export function TemplatesIndexPage({
       imageFile: null,
       removeImage: false,
       itemValue: template.item_value?.toString() ?? "",
-      itemPurchaseDate: template.item_purchase_date ?? "",
+      itemPurchaseDate: normalizeDateInputValue(template.item_purchase_date),
       locationValue: template.location_value?.toString() ?? "",
       links: toResourceLinkDrafts(template.links),
     });
@@ -249,7 +250,8 @@ export function TemplatesIndexPage({
         icon_name: form.iconName || null,
         image_path: uploadedImagePath,
         item_value: form.entityType === "item" ? nextItemValue : null,
-        item_purchase_date: form.entityType === "item" ? form.itemPurchaseDate || null : null,
+        item_purchase_date:
+          form.entityType === "item" ? normalizeDateInputValue(form.itemPurchaseDate) || null : null,
         location_value: form.entityType === "location" ? nextLocationValue : null,
         links: nextLinks,
       });
@@ -323,7 +325,8 @@ export function TemplatesIndexPage({
         icon_name: form.iconName || null,
         image_path: nextImagePath,
         item_value: form.entityType === "item" ? nextItemValue : null,
-        item_purchase_date: form.entityType === "item" ? form.itemPurchaseDate || null : null,
+        item_purchase_date:
+          form.entityType === "item" ? normalizeDateInputValue(form.itemPurchaseDate) || null : null,
         location_value: form.entityType === "location" ? nextLocationValue : null,
         links: nextLinks,
       });
@@ -499,7 +502,7 @@ export function TemplatesIndexPage({
                   ) : null}
                   {template.item_purchase_date ? (
                     <span className="rounded-full bg-gray-100 px-3 py-2 dark:bg-gray-800">
-                      Kaufdatum: {template.item_purchase_date}
+                      Kaufdatum: {formatInventoryDate(template.item_purchase_date)}
                     </span>
                   ) : null}
                 </div>

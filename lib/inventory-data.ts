@@ -5,6 +5,7 @@ import {
   type LocationType,
   type Tag,
 } from "@/lib/inventory";
+import { normalizeNullableDateValue } from "@/lib/inventory-dates";
 import { supabase } from "@/lib/supabase";
 
 export type LocationRecord = {
@@ -157,6 +158,20 @@ export type TagAssignmentData = {
   assignedItemIds: string[];
 };
 
+function normalizeItemRecord<T extends ItemRecord>(item: T): T {
+  return {
+    ...item,
+    purchase_date: normalizeNullableDateValue(item.purchase_date),
+  };
+}
+
+function normalizeTemplateRecord<T extends InventoryTemplateRecord>(template: T): T {
+  return {
+    ...template,
+    item_purchase_date: normalizeNullableDateValue(template.item_purchase_date),
+  };
+}
+
 export async function fetchLocationDetailData(locationId: string): Promise<LocationDetailData> {
   const [
     locationResponse,
@@ -235,11 +250,11 @@ export async function fetchItemDetailData(itemId: string): Promise<ItemDetailDat
 
   const availableTags = (allTagsResponse.data ?? []) as Tag[];
   const tagIds = (itemTagsResponse.data ?? []).map((entry) => entry.tag_id as string);
-  const allItems = (allItemsResponse.data ?? []) as ItemRecord[];
+  const allItems = ((allItemsResponse.data ?? []) as ItemRecord[]).map(normalizeItemRecord);
   const linkedItemIds = new Set((linkedIdsResponse.data ?? []).map((row) => row.linked_item_id as string));
 
   return {
-    item: (itemResponse.data as ItemRecord | null) ?? null,
+    item: itemResponse.data ? normalizeItemRecord(itemResponse.data as ItemRecord) : null,
     locations: (locationsResponse.data ?? []) as Array<{ id: string; name: string }>,
     assignedTags: availableTags.filter((tag) => tagIds.includes(tag.id)),
     availableTags,
@@ -289,8 +304,8 @@ export async function fetchDashboardData(): Promise<DashboardData> {
 
   return {
     locations: (locationsResponse.data ?? []) as LocationRecord[],
-    items: (itemsResponse.data ?? []) as ItemRecord[],
-    templates: (templatesResponse.data ?? []) as InventoryTemplateRecord[],
+    items: ((itemsResponse.data ?? []) as ItemRecord[]).map(normalizeItemRecord),
+    templates: ((templatesResponse.data ?? []) as InventoryTemplateRecord[]).map(normalizeTemplateRecord),
     topTags,
   };
 }
@@ -332,7 +347,7 @@ export async function fetchSearchResults(query: string): Promise<SearchResultRec
   }
 
   const locations = (locationsResponse.data ?? []) as LocationRecord[];
-  const items = (itemsResponse.data ?? []) as ItemRecord[];
+  const items = ((itemsResponse.data ?? []) as ItemRecord[]).map(normalizeItemRecord);
   const tags = (tagsResponse.data ?? []) as Tag[];
   const itemTags = (itemTagsResponse.data ?? []) as Array<{ item_id: string; tag_id: string }>;
 
@@ -528,7 +543,7 @@ export async function fetchTagDetailData(tagId: string): Promise<TagDetailData> 
 
   return {
     tag,
-    items: allItems.filter((item) => itemIds.has(item.id)),
+    items: allItems.map(normalizeItemRecord).filter((item) => itemIds.has(item.id)),
     locations: allLocations.filter((location) => locationIds.has(location.id)),
     usage: tag
       ? {
@@ -563,7 +578,7 @@ export async function fetchTagAssignmentData(tagId: string): Promise<TagAssignme
 
   return {
     tag: (tagResponse.data as Tag | null) ?? null,
-    items: (itemsResponse.data ?? []) as ItemRecord[],
+    items: ((itemsResponse.data ?? []) as ItemRecord[]).map(normalizeItemRecord),
     locations: (locationsResponse.data ?? []) as LocationRecord[],
     assignedItemIds: (itemTagsResponse.data ?? []).map((entry) => entry.item_id as string),
   };
@@ -580,7 +595,7 @@ export async function fetchTemplatesOverview(): Promise<InventoryTemplateRecord[
     throw new Error(error.message);
   }
 
-  return (data ?? []) as InventoryTemplateRecord[];
+  return ((data ?? []) as InventoryTemplateRecord[]).map(normalizeTemplateRecord);
 }
 
 export async function fetchInventoryActivity(limit = 200): Promise<InventoryActivityRecord[]> {

@@ -29,6 +29,7 @@ import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { Select } from "@/components/ui/Select";
 import { logInventoryActivity } from "@/lib/inventory-activity";
+import { formatInventoryDate, normalizeDateInputValue } from "@/lib/inventory-dates";
 import { ITEM_STATUS_OPTIONS, getItemStatusLabel, type ItemStatus } from "@/lib/inventory";
 import { removeInventoryImage, uploadInventoryImage } from "@/lib/inventory-media";
 import {
@@ -80,7 +81,9 @@ export function ItemDetailPage({
   const [editLocation, setEditLocation] = useState<string | null>(initialData.item?.location_id ?? null);
   const [editDescription, setEditDescription] = useState(initialData.item?.description ?? "");
   const [editPrice, setEditPrice] = useState(initialData.item?.value?.toString() ?? "");
-  const [editPurchaseDate, setEditPurchaseDate] = useState(initialData.item?.purchase_date ?? "");
+  const [editPurchaseDate, setEditPurchaseDate] = useState(
+    normalizeDateInputValue(initialData.item?.purchase_date),
+  );
   const [editStatus, setEditStatus] = useState<ItemStatus | "">(initialData.item?.status ?? "");
   const [editIconName, setEditIconName] = useState(initialData.item?.icon_name ?? "");
   const [editImageFile, setEditImageFile] = useState<File | null>(null);
@@ -109,7 +112,7 @@ export function ItemDetailPage({
         setEditLocation(data.item.location_id);
         setEditDescription(data.item.description ?? "");
         setEditPrice(data.item.value?.toString() ?? "");
-        setEditPurchaseDate(data.item.purchase_date ?? "");
+        setEditPurchaseDate(normalizeDateInputValue(data.item.purchase_date));
         setEditStatus(data.item.status ?? "");
         setEditIconName(data.item.icon_name ?? "");
         setEditImageFile(null);
@@ -180,7 +183,7 @@ export function ItemDetailPage({
       item_name: editName.trim(),
       item_description: editDescription.trim() || null,
       item_value: normalizedPrice,
-      item_purchase_date: editPurchaseDate || null,
+      item_purchase_date: normalizeDateInputValue(editPurchaseDate) || null,
       item_status: editStatus || null,
       item_icon_name: editIconName || null,
       item_image_path: nextImagePath,
@@ -405,7 +408,7 @@ export function ItemDetailPage({
                 <DetailField label="Location" value={locationName} />
                 <DetailField label="Status" value={getItemStatusLabel(item.status)} />
                 <DetailField label="Preis" value={formatPrice(item.value)} />
-                <DetailField label="Kaufdatum" value={item.purchase_date ?? "-"} />
+                <DetailField label="Kaufdatum" value={formatInventoryDate(item.purchase_date)} />
                 <DetailField label="Erstellt" value={formatDate(item.created_at)} />
                 <DetailField label="ID" value={item.id} />
               </div>

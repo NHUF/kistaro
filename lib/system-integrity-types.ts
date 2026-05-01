@@ -5,6 +5,7 @@ export type IntegrityRepairMode =
   | "delete_record"
   | "reassign_item_location"
   | "reset_location_parent"
+  | "normalize_date"
   | "none";
 
 export type IntegrityIssue = {
@@ -16,9 +17,11 @@ export type IntegrityIssue = {
     | "item_document_invalid"
     | "resource_link_invalid"
     | "item_tag_invalid"
-    | "location_tag_invalid";
+    | "location_tag_invalid"
+    | "item_purchase_date_invalid"
+    | "template_purchase_date_invalid";
   severity: IntegrityIssueSeverity;
-  entityType: "item" | "location" | "document" | "link" | "tag" | "system";
+  entityType: "item" | "location" | "document" | "link" | "tag" | "template" | "system";
   entityId: string;
   title: string;
   description: string;

@@ -36,6 +36,7 @@ import { Select } from "@/components/ui/Select";
 import type { DashboardData, ResourceLinkRecord } from "@/lib/inventory-data";
 import { removeInventoryImage, uploadInventoryImage } from "@/lib/inventory-media";
 import { logInventoryActivity } from "@/lib/inventory-activity";
+import { normalizeDateInputValue } from "@/lib/inventory-dates";
 import {
   ITEM_STATUS_OPTIONS,
   LOCATION_TYPE_OPTIONS,
@@ -244,8 +245,14 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
     const { data: locationTagsData } = await supabase.from<Array<{ location_id: string; tag_id: string }>>("location_tags").select("location_id, tag_id");
 
     const nextLocations = locationData ?? [];
-    const nextItems = itemData ?? [];
-    const nextTemplates = (templateData ?? []) as InventoryTemplate[];
+    const nextItems = (itemData ?? []).map((item) => ({
+      ...item,
+      purchase_date: normalizeDateInputValue(item.purchase_date) || null,
+    }));
+    const nextTemplates = ((templateData ?? []) as InventoryTemplate[]).map((template) => ({
+      ...template,
+      item_purchase_date: normalizeDateInputValue(template.item_purchase_date) || null,
+    }));
     const nextTags = (tagsData ?? []) as Array<{ id: string; name: string }>;
     const nextItemTags = (itemTagsData ?? []) as Array<{ item_id: string; tag_id: string }>;
     const nextLocationTags = (locationTagsData ?? []) as Array<{ location_id: string; tag_id: string }>;
@@ -418,7 +425,8 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
         icon_name: createType === "item" ? itemIcon || null : locIcon || null,
         image_path: uploadedImagePath,
         item_value: createType === "item" ? nextItemValue : null,
-        item_purchase_date: createType === "item" ? itemPurchaseDate || null : null,
+        item_purchase_date:
+          createType === "item" ? normalizeDateInputValue(itemPurchaseDate) || null : null,
         location_value: createType === "location" ? nextLocationValue : null,
         links: nextLinks,
       });
@@ -552,7 +560,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
         item_image_path: uploadedImagePath ?? templateImagePath,
         item_description: itemDescription.trim() || null,
         item_value: nextItemValue,
-        item_purchase_date: itemPurchaseDate || null,
+        item_purchase_date: normalizeDateInputValue(itemPurchaseDate) || null,
         item_status: itemStatus || null,
       });
 
@@ -771,7 +779,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
       item_name: editItemName.trim(),
       item_description: editItemDescription.trim() || null,
       item_value: nextValue,
-      item_purchase_date: editItemPurchaseDate || null,
+      item_purchase_date: normalizeDateInputValue(editItemPurchaseDate) || null,
       item_status: editItemStatus || null,
       item_icon_name: editItemIcon || null,
       item_image_path: nextImagePath,
@@ -954,7 +962,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
     setEditItemName(item.name);
     setEditItemDescription(item.description ?? "");
     setEditItemValue(item.value?.toString() ?? "");
-    setEditItemPurchaseDate(item.purchase_date ?? "");
+    setEditItemPurchaseDate(normalizeDateInputValue(item.purchase_date));
     setEditItemStatus(item.status ?? "");
     setEditItemLocation(item.location_id);
     setEditItemIcon(item.icon_name ?? "");
@@ -1036,7 +1044,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
         setItemDescription(selectedTemplate.description ?? "");
         setItemStatus(selectedTemplate.item_status ?? "");
         setItemValue(selectedTemplate.item_value?.toString() ?? "");
-        setItemPurchaseDate(selectedTemplate.item_purchase_date ?? "");
+        setItemPurchaseDate(normalizeDateInputValue(selectedTemplate.item_purchase_date));
         setItemIcon(selectedTemplate.icon_name ?? "");
         setItemLinks(toResourceLinkDrafts(selectedTemplate.links));
         return;

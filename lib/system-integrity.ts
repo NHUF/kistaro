@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { query, queryRows } from "@/lib/db";
+import { hasInvalidStoredDateValue, normalizeNullableDateValue } from "@/lib/inventory-dates";
 import { resolveStoragePath } from "@/lib/local-file-storage";
 import { logSystemActivity } from "@/lib/system-activity";
 import type {
@@ -30,6 +31,8 @@ export async function scanInventoryIntegrity(): Promise<IntegrityReport> {
     resourceLinksInvalid,
     itemTagsInvalid,
     locationTagsInvalid,
+    itemsWithPurchaseDate,
+    templatesWithPurchaseDate,
   ] = await Promise.all([
     queryRows<{ id: string; name: string }>(
       `select id, name from public.locations order by name`,
@@ -114,6 +117,16 @@ export async function scanInventoryIntegrity(): Promise<IntegrityReport> {
        left join public.locations l on l.id = lt.location_id
        left join public.tags t on t.id = lt.tag_id
        where l.id is null or t.id is null`,
+    ),
+    queryRows<{ id: string; name: string; purchase_date: string | null }>(
+      `select id, name, purchase_date
+       from public.items
+       where purchase_date is not null`,
+    ),
+    queryRows<{ id: string; name: string; item_purchase_date: string | null }>(
+      `select id, name, item_purchase_date
+       from public.inventory_templates
+       where item_purchase_date is not null`,
     ),
   ]);
 
@@ -240,6 +253,48 @@ export async function scanInventoryIntegrity(): Promise<IntegrityReport> {
     });
   }
 
+  for (const item of itemsWithPurchaseDate) {
+    if (!hasInvalidStoredDateValue(item.purchase_date)) {
+      continue;
+    }
+
+    issues.push({
+      id: createIssueId("item_purchase_date_invalid", item.id),
+      code: "item_purchase_date_invalid",
+      severity: "error",
+      entityType: "item",
+      entityId: item.id,
+      title: `Item mit ungueltigem Kaufdatum: ${item.name || item.id}`,
+      description: "Dieses Item hat ein Kaufdatum im falschen Format. Das kann Detailseiten und Bearbeitungsdialoge stoeren.",
+      repairMode: "normalize_date",
+      metadata: {
+        itemId: item.id,
+        purchaseDate: item.purchase_date,
+      },
+    });
+  }
+
+  for (const template of templatesWithPurchaseDate) {
+    if (!hasInvalidStoredDateValue(template.item_purchase_date)) {
+      continue;
+    }
+
+    issues.push({
+      id: createIssueId("template_purchase_date_invalid", template.id),
+      code: "template_purchase_date_invalid",
+      severity: "warning",
+      entityType: "template",
+      entityId: template.id,
+      title: `Vorlage mit ungueltigem Kaufdatum: ${template.name || template.id}`,
+      description: "Diese Vorlage speichert ein Kaufdatum im falschen Format und sollte bereinigt werden.",
+      repairMode: "normalize_date",
+      metadata: {
+        templateId: template.id,
+        purchaseDate: template.item_purchase_date,
+      },
+    });
+  }
+
   const issueList = issues.sort((a, b) => {
     if (a.severity !== b.severity) {
       return a.severity === "error" ? -1 : 1;
@@ -311,6 +366,20 @@ async function repairIssue(issue: IntegrityIssue, targetLocationId?: string | nu
         issue.metadata?.tagId,
       ]);
       return "Defekte Location-Tag-Zuordnung wurde entfernt.";
+    }
+    case "item_purchase_date_invalid": {
+      await query(`update public.items set purchase_date = $1 where id = $2`, [
+        normalizeNullableDateValue(issue.metadata?.purchaseDate),
+        issue.entityId,
+      ]);
+      return "Kaufdatum des Items wurde bereinigt.";
+    }
+    case "template_purchase_date_invalid": {
+      await query(`update public.inventory_templates set item_purchase_date = $1 where id = $2`, [
+        normalizeNullableDateValue(issue.metadata?.purchaseDate),
+        issue.entityId,
+      ]);
+      return "Kaufdatum der Vorlage wurde bereinigt.";
     }
     default:
       throw new Error("Dieser Defekt kann aktuell nicht automatisch repariert werden.");
