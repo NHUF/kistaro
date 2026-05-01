@@ -102,13 +102,14 @@ export function SystemPage({ status }: Props) {
     setRestoreMessage(null);
 
     startRestoreTransition(async () => {
-      const formData = new FormData();
-      formData.set("mode", "replace");
-      formData.set("file", selectedFile);
-
       const response = await fetch("/api/system/backup", {
         method: "POST",
-        body: formData,
+        headers: {
+          "Content-Type": selectedFile.type || "application/zip",
+          "X-Kistaro-Restore-Mode": "replace",
+          "X-Kistaro-Backup-Name": selectedFile.name,
+        },
+        body: selectedFile,
       });
 
       const result = (await response.json()) as { error?: string; message?: string };
