@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { DetailField } from "@/components/inventory/DetailField";
+import { InventoryImage } from "@/components/inventory/InventoryImage";
+import { InventoryIconBadge, ItemStatusIcon } from "@/components/inventory/InventoryIcon";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
@@ -108,6 +110,12 @@ export function TagDetailPage({ initialData }: { initialData: TagDetailData }) {
             <h1 className="text-3xl font-semibold">{initialData.tag.name}</h1>
           </div>
           <div className="flex gap-2">
+            <Link
+              href={`/tags/${initialData.tag.id}/assign`}
+              className="rounded-md bg-green-600 px-3 py-1 text-sm font-medium text-white transition hover:bg-green-700"
+            >
+              Zuweisen
+            </Link>
             <Button variant="ghost" onClick={() => setEditOpen(true)}>
               Bearbeiten
             </Button>
@@ -136,15 +144,29 @@ export function TagDetailPage({ initialData }: { initialData: TagDetailData }) {
                   href={`/items/${item.id}`}
                   className="block rounded-2xl bg-gray-50 px-4 py-4 transition hover:bg-gray-100 dark:bg-gray-800 dark:hover:bg-gray-700"
                 >
-                  <h2 className="text-lg font-semibold">{item.name}</h2>
-                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                    {getItemStatusLabel(item.status)}
-                  </p>
-                  {item.description ? (
-                    <p className="mt-2 line-clamp-2 whitespace-pre-line text-sm text-gray-600 dark:text-gray-300">
-                      {item.description}
-                    </p>
-                  ) : null}
+                  <div className="flex items-start gap-3">
+                    <InventoryImage
+                      alt={item.name}
+                      imagePath={item.image_path}
+                      className="h-14 w-14 rounded-2xl object-cover"
+                      fallback={
+                        <InventoryIconBadge className="h-14 w-14 rounded-2xl bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-300">
+                          <ItemStatusIcon status={item.status} iconName={item.icon_name} className="h-5 w-5" />
+                        </InventoryIconBadge>
+                      }
+                    />
+                    <div className="min-w-0 flex-1">
+                      <h2 className="text-lg font-semibold">{item.name}</h2>
+                      <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                        {getItemStatusLabel(item.status)}
+                      </p>
+                      {item.description ? (
+                        <p className="mt-2 line-clamp-2 whitespace-pre-line text-sm text-gray-600 dark:text-gray-300">
+                          {item.description}
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
                 </Link>
               ))
             ) : (

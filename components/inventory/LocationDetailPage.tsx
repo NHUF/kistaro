@@ -309,11 +309,16 @@ export function LocationDetailPage({
                 Location
               </p>
               <h1 className="text-3xl font-semibold">{location.name}</h1>
-              <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-                {getLocationTypeLabel(location.type)}
-              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <span className="rounded-full bg-green-50 px-3 py-1 text-sm font-medium text-green-700 dark:bg-green-950/40 dark:text-green-300">
+                  {getLocationTypeLabel(location.type)}
+                </span>
+                <span className="rounded-full bg-gray-100 px-3 py-1 text-sm text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                  Parent: {parentName}
+                </span>
+              </div>
               {location.icon_name ? (
-                <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">
                   Icon: {getMaterialIconLabel(location.icon_name)}
                 </p>
               ) : null}
@@ -335,39 +340,70 @@ export function LocationDetailPage({
           </ActionMenu>
         </div>
 
-        <section className="rounded-3xl bg-white p-6 shadow-sm dark:bg-gray-900">
-          <div className="mb-4 overflow-hidden rounded-2xl border border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800/40">
-            <InventoryImage
-              alt={location.name}
-              imagePath={location.image_path}
-              className="h-auto w-full object-contain"
-              fallback={
-                <div className="flex h-64 w-full items-center justify-center">
-                  <InventoryIconBadge className="h-20 w-20 rounded-[2rem] bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-300">
-                    <LocationTypeIcon type={location.type} iconName={location.icon_name} className="h-10 w-10" />
-                  </InventoryIconBadge>
-                </div>
-              }
-            />
-          </div>
-          <div className="grid gap-4 md:grid-cols-2">
-            <DetailField label="ID" value={location.id} />
-            <DetailField label="Parent" value={parentName} />
-            <DetailField label="Typ" value={getLocationTypeLabel(location.type)} />
-            <DetailField
-              label="Preis"
-              value={location.value != null ? `${location.value} EUR` : "Nicht hinterlegt"}
-            />
-            <DetailField label="Erstellt" value={formatDate(location.created_at)} />
+        <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+          <div className="rounded-3xl bg-white p-6 shadow-sm dark:bg-gray-900">
+            <div className="overflow-hidden rounded-3xl border border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800/40">
+              <InventoryImage
+                alt={location.name}
+                imagePath={location.image_path}
+                className="h-auto w-full object-contain"
+                fallback={
+                  <div className="flex h-72 w-full items-center justify-center">
+                    <InventoryIconBadge className="h-24 w-24 rounded-[2rem] bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-300">
+                      <LocationTypeIcon type={location.type} iconName={location.icon_name} className="h-12 w-12" />
+                    </InventoryIconBadge>
+                  </div>
+                }
+              />
+            </div>
+
+            <div className="mt-5 rounded-3xl border border-gray-200 bg-gray-50 p-5 dark:border-gray-800 dark:bg-gray-800/70">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">
+                Beschreibung
+              </p>
+              <p className="mt-3 whitespace-pre-line text-base leading-7 text-gray-700 dark:text-gray-200">
+                {location.description?.trim() ? location.description : "Keine Beschreibung hinterlegt."}
+              </p>
+            </div>
           </div>
 
-          <div className="mt-4 rounded-2xl bg-gray-50 p-4 dark:bg-gray-800/70">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">
-              Beschreibung
-            </p>
-            <p className="mt-2 whitespace-pre-line text-sm text-gray-700 dark:text-gray-200">
-              {location.description?.trim() ? location.description : "Keine Beschreibung hinterlegt."}
-            </p>
+          <div className="space-y-4">
+            <section className="rounded-3xl bg-white p-5 shadow-sm dark:bg-gray-900">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">
+                Schnellinfo
+              </p>
+              <div className="mt-4 grid gap-3">
+                <DetailField label="Parent" value={parentName} />
+                <DetailField label="Typ" value={getLocationTypeLabel(location.type)} />
+                <DetailField
+                  label="Preis"
+                  value={location.value != null ? `${location.value} EUR` : "Nicht hinterlegt"}
+                />
+                <DetailField label="Erstellt" value={formatDate(location.created_at)} />
+                <DetailField label="ID" value={location.id} />
+              </div>
+            </section>
+
+            <section className="rounded-3xl bg-white p-5 shadow-sm dark:bg-gray-900">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">
+                Einordnung
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {assignedTags.length > 0 ? (
+                  assignedTags.map((tag) => (
+                    <Link
+                      key={tag.id}
+                      href={`/tags/${tag.id}`}
+                      className="rounded-full bg-gray-100 px-3 py-1 text-sm text-gray-700 transition hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                    >
+                      {tag.name}
+                    </Link>
+                  ))
+                ) : (
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Keine Tags zugeordnet.</p>
+                )}
+              </div>
+            </section>
           </div>
         </section>
 

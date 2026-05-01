@@ -1,4 +1,10 @@
-import type { ItemStatus, LocationType, Tag } from "@/lib/inventory";
+import {
+  getItemStatusLabel,
+  getLocationTypeLabel,
+  type ItemStatus,
+  type LocationType,
+  type Tag,
+} from "@/lib/inventory";
 import { supabase } from "@/lib/supabase";
 
 export type LocationRecord = {
@@ -96,6 +102,10 @@ export type SearchResultRecord = {
   subtitle: string | null;
   meta: string | null;
   href: string;
+  image_path?: string | null;
+  icon_name?: string | null;
+  item_status?: ItemStatus | null;
+  location_type?: LocationType | null;
 };
 
 export type TagUsageRecord = {
@@ -138,6 +148,13 @@ export type TagDetailData = {
   items: ItemRecord[];
   locations: LocationRecord[];
   usage: TagUsageRecord | null;
+};
+
+export type TagAssignmentData = {
+  tag: Tag | null;
+  items: ItemRecord[];
+  locations: LocationRecord[];
+  assignedItemIds: string[];
 };
 
 export async function fetchLocationDetailData(locationId: string): Promise<LocationDetailData> {
@@ -284,16 +301,179 @@ export async function fetchSearchResults(query: string): Promise<SearchResultRec
   if (!normalizedQuery) {
     return [];
   }
+  const tokens = normalizedQuery
+    .toLowerCase()
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter(Boolean);
+  const phrase = normalizedQuery.toLowerCase();
 
-  const { data, error } = await supabase.rpc("search_inventory", {
-    search_term: normalizedQuery,
-  });
+  const [locationsResponse, itemsResponse, tagsResponse, itemTagsResponse] = await Promise.all([
+    supabase.from<LocationRecord[]>("locations").select("*").order("name"),
+    supabase.from<ItemRecord[]>("items").select("*").order("name"),
+    supabase.from<Tag[]>("tags").select("id, name").order("name"),
+    supabase.from<Array<{ item_id: string; tag_id: string }>>("item_tags").select("item_id, tag_id"),
+  ]);
 
-  if (error) {
-    throw new Error(error.message);
+  if (locationsResponse.error) {
+    throw new Error(locationsResponse.error.message);
   }
 
-  return (data ?? []) as SearchResultRecord[];
+  if (itemsResponse.error) {
+    throw new Error(itemsResponse.error.message);
+  }
+
+  if (tagsResponse.error) {
+    throw new Error(tagsResponse.error.message);
+  }
+
+  if (itemTagsResponse.error) {
+    throw new Error(itemTagsResponse.error.message);
+  }
+
+  const locations = (locationsResponse.data ?? []) as LocationRecord[];
+  const items = (itemsResponse.data ?? []) as ItemRecord[];
+  const tags = (tagsResponse.data ?? []) as Tag[];
+  const itemTags = (itemTagsResponse.data ?? []) as Array<{ item_id: string; tag_id: string }>;
+
+  const locationNames = new Map(locations.map((location) => [location.id, location.name]));
+  const tagsById = new Map(tags.map((tag) => [tag.id, tag.name]));
+  const itemTagNames = new Map<string, string[]>();
+
+  for (const entry of itemTags) {
+    const tagName = tagsById.get(entry.tag_id);
+
+    if (!tagName) {
+      continue;
+    }
+
+    itemTagNames.set(entry.item_id, [...(itemTagNames.get(entry.item_id) ?? []), tagName]);
+  }
+
+  function normalizeValues(values: Array<string | null | undefined>) {
+    return values
+      .map((value) => value?.toLowerCase().trim() ?? "")
+      .filter(Boolean);
+  }
+
+  function matchesPhrase(values: Array<string | null | undefined>) {
+    return normalizeValues(values).some((value) => value.includes(phrase));
+  }
+
+  function matchesAllTokens(values: Array<string | null | undefined>) {
+    const normalizedValues = normalizeValues(values);
+    return tokens.every((token) => normalizedValues.some((value) => value.includes(token)));
+  }
+
+  function matchesAssignedTags(tagNames: string[]) {
+    const normalizedTags = normalizeValues(tagNames);
+    return normalizedTags.length > 0 && tokens.every((token) => normalizedTags.some((name) => name.includes(token)));
+  }
+
+  function scoreMatch(values: Array<string | null | undefined>, tagNames: string[] = []) {
+    let score = 0;
+
+    if (matchesPhrase(values)) {
+      score += 4;
+    }
+
+    if (matchesAllTokens(values)) {
+      score += 3;
+    }
+
+    if (matchesAssignedTags(tagNames)) {
+      score += 3;
+    }
+
+    return score;
+  }
+
+  const locationResults = locations
+    .map((location) => {
+      const score = scoreMatch([
+        location.name,
+        location.description,
+        getLocationTypeLabel(location.type),
+      ]);
+
+      return score > 0
+        ? ({
+            result_type: "location",
+            result_id: location.id,
+            title: location.name,
+            subtitle: getLocationTypeLabel(location.type),
+            meta: location.description ?? null,
+            href: `/locations/${location.id}`,
+            image_path: location.image_path ?? null,
+            icon_name: location.icon_name ?? null,
+            location_type: location.type ?? null,
+            score,
+          } satisfies SearchResultRecord & { score: number })
+        : null;
+    })
+    .filter(Boolean) as Array<SearchResultRecord & { score: number }>;
+
+  const itemResults = items
+    .map((item) => {
+      const tagNames = itemTagNames.get(item.id) ?? [];
+      const score = scoreMatch(
+        [
+          item.name,
+          item.description,
+          getItemStatusLabel(item.status),
+          locationNames.get(item.location_id ?? "") ?? "",
+          tagNames.join(" "),
+        ],
+        tagNames,
+      );
+
+      return score > 0
+        ? ({
+            result_type: "item",
+            result_id: item.id,
+            title: item.name,
+            subtitle: locationNames.get(item.location_id ?? "") ?? "Keine Location",
+            meta: item.description ?? (tagNames.length > 0 ? `Tags: ${tagNames.join(", ")}` : null),
+            href: `/items/${item.id}`,
+            image_path: item.image_path ?? null,
+            icon_name: item.icon_name ?? null,
+            item_status: item.status ?? null,
+            score,
+          } satisfies SearchResultRecord & { score: number })
+        : null;
+    })
+    .filter(Boolean) as Array<SearchResultRecord & { score: number }>;
+
+  const tagResults = tags
+    .map((tag) => {
+      const score = scoreMatch([tag.name]);
+
+      return score > 0
+        ? ({
+            result_type: "tag",
+            result_id: tag.id,
+            title: tag.name,
+            subtitle: "Tag",
+            meta: "Oeffnet die Tag-Details und alle verknuepften Items.",
+            href: `/tags/${tag.id}`,
+            score,
+          } satisfies SearchResultRecord & { score: number })
+        : null;
+    })
+    .filter(Boolean) as Array<SearchResultRecord & { score: number }>;
+
+  return [...itemResults, ...locationResults, ...tagResults]
+    .sort((a, b) => {
+      if (b.score !== a.score) {
+        return b.score - a.score;
+      }
+
+      return a.title.localeCompare(b.title, "de");
+    })
+    .map(({ score, ...result }) => {
+      void score;
+      return result;
+    });
 }
 
 export async function fetchTagsOverview(): Promise<TagUsageRecord[]> {
@@ -358,6 +538,34 @@ export async function fetchTagDetailData(tagId: string): Promise<TagDetailData> 
           location_count: locationIds.size,
         }
       : null,
+  };
+}
+
+export async function fetchTagAssignmentData(tagId: string): Promise<TagAssignmentData> {
+  const [tagResponse, itemTagsResponse, itemsResponse, locationsResponse] = await Promise.all([
+    supabase.from<Tag>("tags").select("id, name").eq("id", tagId).maybeSingle(),
+    supabase.from<Array<{ item_id: string }>>("item_tags").select("item_id").eq("tag_id", tagId),
+    supabase.from<ItemRecord[]>("items").select("*").order("name"),
+    supabase.from<LocationRecord[]>("locations").select("*").order("name"),
+  ]);
+
+  if (tagResponse.error) {
+    throw new Error(tagResponse.error.message);
+  }
+
+  if (itemsResponse.error) {
+    throw new Error(itemsResponse.error.message);
+  }
+
+  if (locationsResponse.error) {
+    throw new Error(locationsResponse.error.message);
+  }
+
+  return {
+    tag: (tagResponse.data as Tag | null) ?? null,
+    items: (itemsResponse.data ?? []) as ItemRecord[],
+    locations: (locationsResponse.data ?? []) as LocationRecord[],
+    assignedItemIds: (itemTagsResponse.data ?? []).map((entry) => entry.item_id as string),
   };
 }
 

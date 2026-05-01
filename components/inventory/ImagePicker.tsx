@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, type ReactNode } from "react";
+import { useEffect, useId, useMemo, type ReactNode } from "react";
 import Image from "next/image";
 import { InventoryImage } from "@/components/inventory/InventoryImage";
 import { Button } from "@/components/ui/Button";
@@ -23,8 +23,9 @@ export function ImagePicker({
   removeImage: boolean;
   fallback: ReactNode;
 }) {
-  const libraryInputRef = useRef<HTMLInputElement | null>(null);
-  const cameraInputRef = useRef<HTMLInputElement | null>(null);
+  const inputId = useId();
+  const libraryInputId = `${inputId}-library`;
+  const cameraInputId = `${inputId}-camera`;
   const previewUrl = useMemo(() => {
     if (!pendingFile) {
       return null;
@@ -70,17 +71,17 @@ export function ImagePicker({
       </div>
 
       <input
-        ref={libraryInputRef}
+        id={libraryInputId}
         type="file"
         accept="image/png,image/jpeg,image/webp,image/gif,image/heic,image/heif"
         onChange={(event) => {
           handleFileSelect(event.target.files?.[0] ?? null);
           event.currentTarget.value = "";
         }}
-        className="hidden"
+        className="sr-only"
       />
       <input
-        ref={cameraInputRef}
+        id={cameraInputId}
         type="file"
         accept="image/*"
         capture="environment"
@@ -88,7 +89,7 @@ export function ImagePicker({
           handleFileSelect(event.target.files?.[0] ?? null);
           event.currentTarget.value = "";
         }}
-        className="hidden"
+        className="sr-only"
       />
 
       <div className="overflow-hidden rounded-2xl border border-dashed border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800/40">
@@ -115,15 +116,21 @@ export function ImagePicker({
 
       <div className="space-y-2">
         <div className="flex flex-wrap gap-2">
-          <Button variant="ghost" onClick={() => libraryInputRef.current?.click()}>
+          <label
+            htmlFor={libraryInputId}
+            className="inline-flex cursor-pointer items-center rounded-md px-3 py-1 text-sm font-medium text-gray-800 transition hover:bg-gray-100 dark:text-gray-100 dark:hover:bg-gray-700"
+          >
             Bild auswaehlen
-          </Button>
-          <Button variant="ghost" onClick={() => cameraInputRef.current?.click()}>
-            Foto aufnehmen
-          </Button>
+          </label>
+          <label
+            htmlFor={cameraInputId}
+            className="inline-flex cursor-pointer items-center rounded-md px-3 py-1 text-sm font-medium text-gray-800 transition hover:bg-gray-100 dark:text-gray-100 dark:hover:bg-gray-700"
+          >
+            Hauptkamera oeffnen
+          </label>
         </div>
         <p className="text-xs text-gray-400">
-          Auf dem Handy oeffnet <span className="font-medium">Foto aufnehmen</span> direkt die Kamera.
+          Auf dem Handy versucht <span className="font-medium">Hauptkamera oeffnen</span> direkt die Rueckkamera zu nutzen.
         </p>
       </div>
 

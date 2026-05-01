@@ -179,6 +179,12 @@ export function TagsIndexPage({
                 {tag.location_count ? ` | ${tag.location_count} Locations` : ""}
               </p>
               <div className="mt-4 flex flex-wrap gap-2">
+                <Link
+                  href={`/tags/${tag.id}/assign`}
+                  className="rounded-md bg-green-600 px-3 py-1 text-sm font-medium text-white transition hover:bg-green-700"
+                >
+                  Zuweisen
+                </Link>
                 <Button
                   variant="ghost"
                   onClick={() => {

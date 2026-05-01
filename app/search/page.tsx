@@ -1,6 +1,13 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { FloatingCreateButton } from "@/components/inventory/FloatingCreateButton";
+import { InventoryImage } from "@/components/inventory/InventoryImage";
+import {
+  InventoryIconBadge,
+  ItemStatusIcon,
+  LocationTypeIcon,
+} from "@/components/inventory/InventoryIcon";
+import { getItemStatusLabel, getLocationTypeLabel } from "@/lib/inventory";
 import { fetchSearchResults } from "@/lib/inventory-data";
 
 export const dynamic = "force-dynamic";
@@ -42,7 +49,7 @@ export default async function SearchPage({
                 id="global-search"
                 name="q"
                 defaultValue={query}
-                placeholder="z. B. Keller, Werkzeug, verborgt, Karton"
+                placeholder="z. B. USB Adapter, Werkzeug, verborgt"
                 className="w-full rounded-md border bg-white px-3 py-2 dark:border-gray-600 dark:bg-gray-700"
               />
               <button
@@ -103,8 +110,32 @@ export default async function SearchPage({
                     href={result.href}
                     className="block rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4 transition hover:border-gray-300 hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-800 dark:hover:bg-gray-700"
                   >
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
+                    <div className="flex items-start gap-4">
+                      <InventoryImage
+                        alt={result.title}
+                        imagePath={result.image_path}
+                        className="h-14 w-14 shrink-0 rounded-2xl object-cover"
+                        fallback={
+                          <InventoryIconBadge className="h-14 w-14 shrink-0 rounded-2xl bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-300">
+                            {result.result_type === "item" ? (
+                              <ItemStatusIcon
+                                status={result.item_status ?? null}
+                                iconName={result.icon_name ?? null}
+                                className="h-5 w-5"
+                              />
+                            ) : result.result_type === "location" ? (
+                              <LocationTypeIcon
+                                type={result.location_type ?? null}
+                                iconName={result.icon_name ?? null}
+                                className="h-5 w-5"
+                              />
+                            ) : (
+                              <span className="text-sm font-semibold">#</span>
+                            )}
+                          </InventoryIconBadge>
+                        }
+                      />
+                      <div className="min-w-0 flex-1">
                         <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">
                           {result.result_type === "location"
                             ? "Location"
@@ -114,14 +145,20 @@ export default async function SearchPage({
                         </p>
                         <h2 className="mt-1 text-lg font-semibold">{result.title}</h2>
                         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                          {result.subtitle ?? "-"}
+                          {result.result_type === "item"
+                            ? `${getItemStatusLabel(result.item_status)} | ${result.subtitle ?? "-"}`
+                            : result.result_type === "location"
+                              ? getLocationTypeLabel(result.location_type)
+                              : result.subtitle ?? "-"}
                         </p>
                         {result.meta ? (
-                          <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">{result.meta}</p>
+                          <p className="mt-2 line-clamp-2 whitespace-pre-line text-sm text-gray-600 dark:text-gray-300">
+                            {result.meta}
+                          </p>
                         ) : null}
                       </div>
-                      <span className="text-sm font-medium text-green-700 dark:text-green-400">
-                        Öffnen
+                      <span className="shrink-0 text-sm font-medium text-green-700 dark:text-green-400">
+                        Oeffnen
                       </span>
                     </div>
                   </Link>
