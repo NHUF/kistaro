@@ -1,3 +1,12 @@
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { join, resolve } from "node:path";
 import { NextResponse } from "next/server";
 import {
   createDatabaseBackupZip,
@@ -6,6 +15,12 @@ import {
 } from "@/lib/system-backup";
 
 export const runtime = "nodejs";
+
+const RESTORE_UPLOAD_ROOT = resolve(
+  /*turbopackIgnore: true*/ process.cwd(),
+  "storage",
+  "restore-uploads",
+);
 
 type RestoreUpload = {
   buffer: Buffer;
@@ -23,6 +38,38 @@ function decodeHeaderFileName(value: string | null) {
   } catch {
     return value;
   }
+}
+
+function getHeaderInteger(request: Request, name: string) {
+  const value = request.headers.get(name);
+
+  if (!value) {
+    return null;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function getSafeUploadId(value: string | null) {
+  if (!value || !/^[a-zA-Z0-9_-]{8,120}$/.test(value)) {
+    throw new Error("Backup-Upload konnte nicht eindeutig zugeordnet werden.");
+  }
+
+  return value;
+}
+
+async function readRawBody(request: Request) {
+  const buffer = Buffer.from(await request.arrayBuffer());
+  const declaredLength = getHeaderInteger(request, "content-length");
+
+  if (declaredLength !== null && declaredLength !== buffer.length) {
+    throw new Error(
+      `Backup-Upload wurde unvollständig empfangen: erwartet ${declaredLength} Bytes, erhalten ${buffer.length} Bytes.`,
+    );
+  }
+
+  return buffer;
 }
 
 function getMultipartBoundary(contentType: string) {
@@ -146,17 +193,112 @@ async function readRestoreUpload(request: Request): Promise<RestoreUpload> {
     }
   }
 
-  const rawBody = await request.arrayBuffer();
+  const rawBody = await readRawBody(request);
 
-  if (rawBody.byteLength === 0) {
+  if (rawBody.length === 0) {
     throw new Error("Bitte eine Backup-Datei auswählen.");
   }
 
   return {
     mode: String(modeHeader ?? "replace"),
     fileName: decodeHeaderFileName(request.headers.get("x-kistaro-backup-name")),
-    buffer: Buffer.from(rawBody),
+    buffer: rawBody,
   };
+}
+
+async function restoreBackup(buffer: Buffer, fileName: string, mode: string) {
+  if (mode !== "replace") {
+    return NextResponse.json(
+      { error: "Aktuell wird nur Wiederherstellen mit Ersetzen unterstützt." },
+      { status: 400 },
+    );
+  }
+
+  if (!fileName.toLowerCase().endsWith(".zip")) {
+    return NextResponse.json(
+      { error: "Bitte ein Kistaro-Backup als ZIP-Datei hochladen." },
+      { status: 400 },
+    );
+  }
+
+  const parsedBackup = parseDatabaseBackupZip(buffer);
+  const restoredBackup = await restoreDatabaseBackupReplace(parsedBackup);
+
+  return NextResponse.json({
+    success: true,
+    message: restoredBackup.storageRestored
+      ? `Backup erfolgreich eingespielt. Datenbank und ${restoredBackup.storageFileCount} Storage-Dateien wurden ersetzt.`
+      : "Backup erfolgreich eingespielt. Die aktuelle Datenbank wurde ersetzt.",
+  });
+}
+
+async function handleChunkedRestoreUpload(request: Request) {
+  const uploadId = getSafeUploadId(request.headers.get("x-kistaro-upload-id"));
+  const chunkIndex = getHeaderInteger(request, "x-kistaro-upload-index");
+  const chunkTotal = getHeaderInteger(request, "x-kistaro-upload-total");
+  const expectedFileSize = getHeaderInteger(request, "x-kistaro-upload-size");
+  const mode = String(request.headers.get("x-kistaro-restore-mode") ?? "replace");
+  const fileName = decodeHeaderFileName(request.headers.get("x-kistaro-backup-name"));
+
+  if (
+    chunkIndex === null ||
+    chunkTotal === null ||
+    chunkTotal < 1 ||
+    chunkIndex < 0 ||
+    chunkIndex >= chunkTotal
+  ) {
+    throw new Error("Backup-Upload enthält ungültige Block-Informationen.");
+  }
+
+  const uploadDirectory = join(RESTORE_UPLOAD_ROOT, uploadId);
+  const chunkPath = join(uploadDirectory, `${chunkIndex}.part`);
+  const chunk = await readRawBody(request);
+
+  if (chunk.length === 0) {
+    throw new Error("Ein Backup-Block wurde leer übertragen.");
+  }
+
+  mkdirSync(uploadDirectory, { recursive: true });
+  writeFileSync(chunkPath, chunk);
+
+  const receivedChunkCount = readdirSync(uploadDirectory)
+    .filter((entry) => entry.endsWith(".part"))
+    .length;
+
+  if (receivedChunkCount < chunkTotal) {
+    return NextResponse.json({
+      success: true,
+      partial: true,
+      progress: Math.floor((receivedChunkCount / chunkTotal) * 100),
+      message: `Backup wird hochgeladen (${receivedChunkCount}/${chunkTotal}).`,
+    });
+  }
+
+  try {
+    const chunks: Buffer[] = [];
+
+    for (let index = 0; index < chunkTotal; index += 1) {
+      const currentPath = join(uploadDirectory, `${index}.part`);
+
+      if (!existsSync(currentPath)) {
+        throw new Error(`Backup-Upload ist unvollständig: Block ${index + 1} fehlt.`);
+      }
+
+      chunks.push(readFileSync(currentPath));
+    }
+
+    const backupBuffer = Buffer.concat(chunks);
+
+    if (expectedFileSize !== null && backupBuffer.length !== expectedFileSize) {
+      throw new Error(
+        `Backup-Upload ist unvollständig: erwartet ${expectedFileSize} Bytes, erhalten ${backupBuffer.length} Bytes.`,
+      );
+    }
+
+    return await restoreBackup(backupBuffer, fileName, mode);
+  } finally {
+    rmSync(uploadDirectory, { recursive: true, force: true });
+  }
 }
 
 export async function GET() {
@@ -180,32 +322,12 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    if (request.headers.has("x-kistaro-upload-id")) {
+      return await handleChunkedRestoreUpload(request);
+    }
+
     const { buffer, fileName, mode } = await readRestoreUpload(request);
-
-    if (mode !== "replace") {
-      return NextResponse.json(
-        { error: "Aktuell wird nur Wiederherstellen mit Ersetzen unterstützt." },
-        { status: 400 },
-      );
-    }
-
-    if (!fileName.toLowerCase().endsWith(".zip")) {
-      return NextResponse.json(
-        { error: "Bitte ein Kistaro-Backup als ZIP-Datei hochladen." },
-        { status: 400 },
-      );
-    }
-
-    const parsedBackup = parseDatabaseBackupZip(buffer);
-
-    const restoredBackup = await restoreDatabaseBackupReplace(parsedBackup);
-
-    return NextResponse.json({
-      success: true,
-      message: restoredBackup.storageRestored
-        ? `Backup erfolgreich eingespielt. Datenbank und ${restoredBackup.storageFileCount} Storage-Dateien wurden ersetzt.`
-        : "Backup erfolgreich eingespielt. Die aktuelle Datenbank wurde ersetzt.",
-    });
+    return await restoreBackup(buffer, fileName, mode);
   } catch (error) {
     return NextResponse.json(
       {

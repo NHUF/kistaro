@@ -11,6 +11,7 @@ type Props = {
 };
 
 const GITHUB_REPOSITORY_URL = "https://github.com/NHUF/kistaro";
+const BACKUP_UPLOAD_CHUNK_SIZE = 512 * 1024;
 
 export function SystemPage({ status }: Props) {
   const [passwordForm, setPasswordForm] = useState({
@@ -123,27 +124,50 @@ export function SystemPage({ status }: Props) {
       return;
     }
 
+    const backupFile = selectedFile;
+
     setRestoreMessage(null);
 
     startRestoreTransition(async () => {
-      const response = await fetch("/api/system/backup", {
-        method: "POST",
-        headers: {
-          "Content-Type": selectedFile.type || "application/zip",
-          "x-kistaro-restore-mode": "replace",
-          "x-kistaro-backup-name": encodeURIComponent(selectedFile.name),
-        },
-        body: selectedFile,
-      });
+      const uploadId =
+        typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const chunkTotal = Math.max(1, Math.ceil(backupFile.size / BACKUP_UPLOAD_CHUNK_SIZE));
+      let finalMessage = "Backup eingespielt.";
 
-      const result = (await response.json()) as { error?: string; message?: string };
+      for (let chunkIndex = 0; chunkIndex < chunkTotal; chunkIndex += 1) {
+        const start = chunkIndex * BACKUP_UPLOAD_CHUNK_SIZE;
+        const end = Math.min(start + BACKUP_UPLOAD_CHUNK_SIZE, backupFile.size);
+        const chunk = backupFile.slice(start, end);
 
-      if (!response.ok) {
-        setRestoreMessage(result.error ?? "Backup konnte nicht eingespielt werden.");
-        return;
+        setRestoreMessage(`Backup wird hochgeladen (${chunkIndex + 1}/${chunkTotal})...`);
+
+        const response = await fetch("/api/system/backup", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/octet-stream",
+            "x-kistaro-restore-mode": "replace",
+            "x-kistaro-backup-name": encodeURIComponent(backupFile.name),
+            "x-kistaro-upload-id": uploadId,
+            "x-kistaro-upload-index": String(chunkIndex),
+            "x-kistaro-upload-total": String(chunkTotal),
+            "x-kistaro-upload-size": String(backupFile.size),
+          },
+          body: chunk,
+        });
+
+        const result = (await response.json()) as { error?: string; message?: string; partial?: boolean };
+
+        if (!response.ok) {
+          setRestoreMessage(result.error ?? "Backup konnte nicht eingespielt werden.");
+          return;
+        }
+
+        finalMessage = result.message ?? finalMessage;
       }
 
-      setRestoreMessage(result.message ?? "Backup eingespielt.");
+      setRestoreMessage(finalMessage);
       setSelectedFile(null);
       window.location.reload();
     });
