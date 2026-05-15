@@ -529,9 +529,9 @@ export function SystemPage({ status }: Props) {
                 <MdDataset className="h-6 w-6 text-blue-700 dark:text-blue-300" />
               </span>
               <div>
-                <h2 className="text-lg font-semibold">Datenbank-Backup</h2>
+                <h2 className="text-lg font-semibold">Backup</h2>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Exportiert die aktuelle Datenbank als ZIP und kann sie vollständig ersetzen.
+                  Exportiert Datenbank, Bilder und Dokumente als ZIP und kann sie vollständig ersetzen.
                 </p>
               </div>
             </div>
@@ -555,7 +555,7 @@ export function SystemPage({ status }: Props) {
                   className="rounded-xl border border-dashed border-gray-300 bg-gray-50 px-3 py-3 text-sm dark:border-gray-700 dark:bg-gray-950"
                 />
                 <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Unterstützt wird aktuell Wiederherstellen mit Ersetzen.
+                  Unterstützt wird aktuell Wiederherstellen mit Ersetzen. Storage-Dateien werden geprüft.
                 </p>
               </div>
 
@@ -880,7 +880,9 @@ export function SystemPage({ status }: Props) {
             </div>
             <div>
               <dt className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">Backup-Modus</dt>
-              <dd className="mt-1 text-sm text-gray-700 dark:text-gray-200">Datenbank als ZIP, Restore nur Ersetzen</dd>
+              <dd className="mt-1 text-sm text-gray-700 dark:text-gray-200">
+                Datenbank + Storage als ZIP, Restore nur Ersetzen
+              </dd>
             </div>
           </dl>
         </section>

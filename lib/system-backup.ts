@@ -23,6 +23,18 @@ type ParsedBackup = {
   databaseSql: string;
   replaceStorage: boolean;
   storageEntries: ZipEntry[];
+  storageManifest: StorageManifest | null;
+};
+
+type StorageManifest = {
+  version: number;
+  file_count: number;
+  total_bytes?: number;
+  files?: Array<{
+    crc32: string;
+    path: string;
+    size: number;
+  }>;
 };
 
 function getDatabaseUrl() {
@@ -150,6 +162,7 @@ function extractZipEntries(zipBuffer: Buffer) {
       throw new Error("Dieses ZIP-Format wird nicht unterstützt.");
     }
 
+    const expectedChecksum = zipBuffer.readUInt32LE(offset + 14);
     const compressedSize = zipBuffer.readUInt32LE(offset + 18);
     const fileNameLength = zipBuffer.readUInt16LE(offset + 26);
     const extraLength = zipBuffer.readUInt16LE(offset + 28);
@@ -157,9 +170,19 @@ function extractZipEntries(zipBuffer: Buffer) {
     const fileNameEnd = fileNameStart + fileNameLength;
     const contentStart = fileNameEnd + extraLength;
     const contentEnd = contentStart + compressedSize;
-    const fileName = zipBuffer.subarray(fileNameStart, fileNameEnd).toString("utf8");
 
-    entries.set(fileName, zipBuffer.subarray(contentStart, contentEnd));
+    if (fileNameEnd > zipBuffer.length || contentEnd > zipBuffer.length) {
+      throw new Error("Backup-ZIP ist unvollständig oder beschädigt.");
+    }
+
+    const fileName = zipBuffer.subarray(fileNameStart, fileNameEnd).toString("utf8");
+    const content = zipBuffer.subarray(contentStart, contentEnd);
+
+    if (crc32(content) !== expectedChecksum) {
+      throw new Error(`Backup-Datei ${fileName} ist beschädigt.`);
+    }
+
+    entries.set(fileName, content);
     offset = contentEnd;
   }
 
@@ -167,7 +190,7 @@ function extractZipEntries(zipBuffer: Buffer) {
 }
 
 function assertSafeBackupPath(path: string) {
-  if (!path || path.includes("..") || path.startsWith("/") || path.startsWith("\\")) {
+  if (!path || path.includes("..") || path.includes(":") || path.includes("\\") || path.startsWith("/")) {
     throw new Error("Backup enthält einen ungültigen Dateipfad.");
   }
 }
@@ -207,6 +230,87 @@ function collectStorageEntries() {
   return entries;
 }
 
+function createStorageManifest(entries: ZipEntry[]): StorageManifest {
+  const files = entries
+    .filter((entry) => entry.name.startsWith("storage/uploads/"))
+    .map((entry) => ({
+      path: entry.name.replace(/^storage\/uploads\//, ""),
+      size: entry.content.length,
+      crc32: crc32(entry.content).toString(16).padStart(8, "0"),
+    }))
+    .sort((left, right) => left.path.localeCompare(right.path));
+
+  return {
+    version: 2,
+    file_count: files.length,
+    total_bytes: files.reduce((sum, file) => sum + file.size, 0),
+    files,
+  };
+}
+
+function parseStorageManifest(content: Buffer | undefined): StorageManifest | null {
+  if (!content) {
+    return null;
+  }
+
+  try {
+    const manifest = JSON.parse(content.toString("utf8")) as StorageManifest;
+
+    if (typeof manifest.file_count !== "number") {
+      throw new Error("Storage-Manifest enthält keine gültige Datei-Anzahl.");
+    }
+
+    return manifest;
+  } catch (error) {
+    throw new Error(error instanceof Error ? error.message : "Storage-Manifest konnte nicht gelesen werden.");
+  }
+}
+
+function validateStorageEntries(entries: ZipEntry[], manifest: StorageManifest | null) {
+  if (!manifest) {
+    return;
+  }
+
+  if (entries.length !== manifest.file_count) {
+    throw new Error(
+      `Backup-Storage ist unvollständig: erwartet ${manifest.file_count}, gefunden ${entries.length}.`,
+    );
+  }
+
+  for (const file of manifest.files ?? []) {
+    assertSafeBackupPath(file.path);
+    const entryName = `storage/uploads/${file.path}`;
+    const entry = entries.find((candidate) => candidate.name === entryName);
+
+    if (!entry) {
+      throw new Error(`Backup-Storage fehlt Datei: ${file.path}.`);
+    }
+
+    if (entry.content.length !== file.size || crc32(entry.content).toString(16).padStart(8, "0") !== file.crc32) {
+      throw new Error(`Backup-Storage-Datei ist beschädigt: ${file.path}.`);
+    }
+  }
+}
+
+function verifyRestoredStorageEntries(entries: ZipEntry[]) {
+  const storageRoot = getStorageRoot();
+
+  for (const entry of entries) {
+    const relativePath = entry.name.replace(/^storage\/uploads\//, "");
+    const targetPath = join(storageRoot, relativePath);
+
+    if (!existsSync(targetPath)) {
+      throw new Error(`Storage-Datei wurde nicht wiederhergestellt: ${relativePath}.`);
+    }
+
+    const restoredContent = readFileSync(targetPath);
+
+    if (restoredContent.length !== entry.content.length || crc32(restoredContent) !== crc32(entry.content)) {
+      throw new Error(`Storage-Datei wurde fehlerhaft wiederhergestellt: ${relativePath}.`);
+    }
+  }
+}
+
 function restoreStorageEntries(entries: ZipEntry[]) {
   const storageRoot = getStorageRoot();
 
@@ -226,6 +330,8 @@ function restoreStorageEntries(entries: ZipEntry[]) {
     mkdirSync(dirname(targetPath), { recursive: true });
     writeFileSync(targetPath, entry.content);
   }
+
+  verifyRestoredStorageEntries(entries);
 }
 
 function runPostgresCommand(command: "pg_dump" | "psql", args: string[]) {
@@ -266,11 +372,16 @@ export async function createDatabaseBackupZip() {
     "--no-privileges",
   ]);
   const storageEntries = collectStorageEntries();
+  const storageManifest = createStorageManifest(storageEntries);
 
   await logSystemActivity({
     title: "Datenbank-Backup erstellt",
     description: "Ein lokales PostgreSQL-Backup inklusive Storage-Dateien wurde über die Systemseite erzeugt.",
-    metadata: { created_at: new Date().toISOString(), storage_file_count: storageEntries.length },
+    metadata: {
+      created_at: new Date().toISOString(),
+      storage_file_count: storageManifest.file_count,
+      storage_total_bytes: storageManifest.total_bytes ?? 0,
+    },
   });
 
   return {
@@ -279,7 +390,7 @@ export async function createDatabaseBackupZip() {
       { name: "database.sql", content: Buffer.from(databaseSql, "utf8") },
       {
         name: "storage/manifest.json",
-        content: Buffer.from(JSON.stringify({ version: 1, file_count: storageEntries.length }, null, 2), "utf8"),
+        content: Buffer.from(JSON.stringify(storageManifest, null, 2), "utf8"),
       },
       ...storageEntries,
     ]),
@@ -289,17 +400,22 @@ export async function createDatabaseBackupZip() {
 export function parseDatabaseBackupZip(zipBuffer: Buffer): ParsedBackup {
   const entries = extractZipEntries(zipBuffer);
   const databaseSql = entries.get("database.sql");
+  const storageEntries = Array.from(entries.entries())
+    .filter(([name]) => name.startsWith("storage/uploads/"))
+    .map(([name, content]) => ({ name, content }));
+  const storageManifest = parseStorageManifest(entries.get("storage/manifest.json"));
 
   if (!databaseSql) {
     throw new Error("Backup enthält keine database.sql.");
   }
 
+  validateStorageEntries(storageEntries, storageManifest);
+
   return {
     databaseSql: databaseSql.toString("utf8"),
-    replaceStorage: entries.has("storage/manifest.json"),
-    storageEntries: Array.from(entries.entries())
-      .filter(([name]) => name.startsWith("storage/uploads/"))
-      .map(([name, content]) => ({ name, content })),
+    replaceStorage: Boolean(storageManifest),
+    storageEntries,
+    storageManifest,
   };
 }
 
@@ -320,6 +436,7 @@ export async function restoreDatabaseBackupReplace(parsedBackup: ParsedBackup) {
       sqlPath,
     ]);
     if (parsedBackup.replaceStorage) {
+      validateStorageEntries(parsedBackup.storageEntries, parsedBackup.storageManifest);
       restoreStorageEntries(parsedBackup.storageEntries);
     }
 
@@ -332,6 +449,11 @@ export async function restoreDatabaseBackupReplace(parsedBackup: ParsedBackup) {
         storage_restored: parsedBackup.replaceStorage,
       },
     });
+
+    return {
+      storageFileCount: parsedBackup.storageEntries.length,
+      storageRestored: parsedBackup.replaceStorage,
+    };
   } finally {
     rmSync(tempDirectory, { recursive: true, force: true });
   }

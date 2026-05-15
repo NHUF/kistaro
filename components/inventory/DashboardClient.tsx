@@ -1269,14 +1269,27 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                   <div className="rounded-full bg-green-50 px-3 py-1 text-sm text-green-700 dark:bg-green-950/40 dark:text-green-300">
                     <span className="font-medium">{nestedFocusItems.length}</span> Items verschachtelt
                   </div>
-                  <Select
-                    value={focusScope}
-                    onChange={(event) => setFocusScope(event.target.value as "direct" | "nested")}
-                    className="w-auto min-w-[210px]"
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={focusScope === "nested"}
+                    onClick={() => setFocusScope((current) => (current === "nested" ? "direct" : "nested"))}
+                    className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-500 transition hover:border-gray-300 hover:text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 dark:hover:border-gray-600"
+                    title="Items aus Unter-Locations einbeziehen"
                   >
-                    <option value="direct">Nur ausgewählte Location</option>
-                    <option value="nested">Location + alles darunter</option>
-                  </Select>
+                    <span
+                      className={`flex h-4 w-7 items-center rounded-full p-0.5 transition ${
+                        focusScope === "nested" ? "bg-green-600" : "bg-gray-300 dark:bg-gray-600"
+                      }`}
+                    >
+                      <span
+                        className={`h-3 w-3 rounded-full bg-white shadow-sm transition ${
+                          focusScope === "nested" ? "translate-x-3" : ""
+                        }`}
+                      />
+                    </span>
+                    Unter-Locations
+                  </button>
                   <Link
                     href={`/locations/${selectedLocation}`}
                     className="text-sm font-medium text-green-700 hover:text-green-800 dark:text-green-400"

@@ -141,7 +141,9 @@ build_release() {
 
 restart_service() {
   if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files "${SERVICE_NAME}.service" >/dev/null 2>&1; then
-    run_step "Systemdienst ${SERVICE_NAME} wird neu gestartet" systemctl restart --no-block "${SERVICE_NAME}"
+    log "Systemdienst ${SERVICE_NAME} wird neu gestartet"
+    systemctl restart --no-block "${SERVICE_NAME}" >>"${LOG_FILE}" 2>&1 || \
+      log "Systemdienst ${SERVICE_NAME} konnte nicht automatisch neu gestartet werden."
     return
   fi
 
@@ -166,9 +168,9 @@ main() {
   download_release
   sync_release
   build_release
-  restart_service
-  write_status "completed" "Update auf ${TARGET_TAG} abgeschlossen." 100 "\"$(date -Is)\""
   log "Update auf ${TARGET_TAG} abgeschlossen"
+  write_status "completed" "Update auf ${TARGET_TAG} abgeschlossen. Dienst wird neu gestartet." 100 "\"$(date -Is)\""
+  restart_service
 }
 
 main "$@"

@@ -74,11 +74,13 @@ export async function POST(request: Request) {
 
     const parsedBackup = parseDatabaseBackupZip(buffer);
 
-    await restoreDatabaseBackupReplace(parsedBackup);
+    const restoredBackup = await restoreDatabaseBackupReplace(parsedBackup);
 
     return NextResponse.json({
       success: true,
-      message: "Backup erfolgreich eingespielt. Die aktuelle Datenbank wurde ersetzt.",
+      message: restoredBackup.storageRestored
+        ? `Backup erfolgreich eingespielt. Datenbank und ${restoredBackup.storageFileCount} Storage-Dateien wurden ersetzt.`
+        : "Backup erfolgreich eingespielt. Die aktuelle Datenbank wurde ersetzt.",
     });
   } catch (error) {
     return NextResponse.json(

@@ -26,6 +26,8 @@ export type UpdateCheckResult = {
   error?: string;
 };
 
+const RUNNING_STATUS_STALE_MS = 2 * 60 * 1000;
+
 type GitHubReleaseResponse = {
   tag_name?: string;
   name?: string;
@@ -128,6 +130,30 @@ function readLogTail() {
   }
 }
 
+function normalizeRunningStatus(status: UpdateJobStatus): UpdateJobStatus {
+  if (status.state !== "running" || !status.targetTag || !status.startedAt) {
+    return status;
+  }
+
+  const startedAtTime = new Date(status.startedAt).getTime();
+  const isStale = Number.isFinite(startedAtTime) && Date.now() - startedAtTime > RUNNING_STATUS_STALE_MS;
+
+  if (!isStale || isNewerVersion(status.targetTag, getCurrentAppVersion())) {
+    return status;
+  }
+
+  const completedStatus: UpdateJobStatus = {
+    ...status,
+    state: "completed",
+    message: `Update auf ${status.targetTag} ist installiert.`,
+    progress: 100,
+    finishedAt: new Date().toISOString(),
+  };
+
+  writeUpdateStatus(completedStatus);
+  return completedStatus;
+}
+
 export function readUpdateStatus(): UpdateJobStatus | null {
   try {
     const statusPath = getUpdateStatusPath();
@@ -136,7 +162,7 @@ export function readUpdateStatus(): UpdateJobStatus | null {
       return null;
     }
 
-    const status = JSON.parse(readFileSync(statusPath, "utf8")) as UpdateJobStatus;
+    const status = normalizeRunningStatus(JSON.parse(readFileSync(statusPath, "utf8")) as UpdateJobStatus);
     return {
       ...status,
       logTail: readLogTail(),
