@@ -167,6 +167,14 @@ export function TagAssignPage({
   }, [allowedLocationIds, initialData.items, locationHelpers, query]);
 
   const selectedSet = useMemo(() => new Set(selectedItemIds), [selectedItemIds]);
+  const selectedQuantity = useMemo(
+    () =>
+      initialData.items
+        .filter((item) => selectedSet.has(item.id))
+        .reduce((sum, item) => sum + normalizeItemQuantity(item.quantity), 0),
+    [initialData.items, selectedSet],
+  );
+  const visibleQuantity = visibleItems.reduce((sum, item) => sum + normalizeItemQuantity(item.quantity), 0);
 
   if (!initialData.tag) {
     return (
@@ -227,9 +235,10 @@ export function TagAssignPage({
         entityId: tagId,
         entityType: "tag",
         title: `Tag-Zuweisung aktualisiert: ${tag.name}`,
-        description: `${selectedItemIds.length} Items sind diesem Tag zugeordnet.`,
+        description: `${selectedQuantity} Objekte sind diesem Tag zugeordnet.`,
         metadata: {
-          item_count: selectedItemIds.length,
+          item_count: selectedQuantity,
+          item_row_count: selectedItemIds.length,
         },
       });
 
@@ -258,7 +267,7 @@ export function TagAssignPage({
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-full border border-gray-200 bg-white px-4 py-2 text-sm text-gray-600 shadow-sm dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300">
-              {selectedItemIds.length} ausgewählt
+              {selectedQuantity} Objekte ausgewählt
             </span>
             <Button variant="success" onClick={() => void saveAssignments()} disabled={submitting}>
               {submitting ? "Speichert..." : "Zuweisung speichern"}
@@ -327,7 +336,7 @@ export function TagAssignPage({
         <section className="rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
           <div className="flex flex-col gap-1 border-b border-gray-100 px-4 py-3 dark:border-gray-800 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm font-medium text-gray-600 dark:text-gray-300">
-              {visibleItems.length} Items sichtbar
+              {visibleQuantity} Objekte sichtbar
             </p>
             <p className="text-xs text-gray-400">
               Struktur zeigt bei „Location und Unter-Locations“ alle Items im gesamten Zweig.

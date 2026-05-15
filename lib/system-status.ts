@@ -44,6 +44,14 @@ async function countTable(tableName: string) {
   return row ? Number(row.count) : 0;
 }
 
+async function countItemQuantity() {
+  const row = await queryOne<{ count: string }>(
+    "select coalesce(sum(greatest(coalesce(quantity, 1), 1)), 0)::text as count from public.items",
+  );
+
+  return row ? Number(row.count) : 0;
+}
+
 export async function fetchSystemStatusData(): Promise<SystemStatusData> {
   const fileConfig = readSystemConfig();
   const uptimeSeconds = Math.max(0, Math.floor(uptime()));
@@ -56,7 +64,7 @@ export async function fetchSystemStatusData(): Promise<SystemStatusData> {
   try {
     await checkDatabaseConnection();
     [itemCount, locationCount, tagCount, templateCount] = await Promise.all([
-      countTable("items"),
+      countItemQuantity(),
       countTable("locations"),
       countTable("tags"),
       countTable("inventory_templates"),

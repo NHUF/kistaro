@@ -308,7 +308,12 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
         .map((tag) => ({
           id: tag.id,
           name: tag.name,
-          item_count: nextItemTags.filter((entry) => entry.tag_id === tag.id).length,
+          item_count: nextItemTags
+            .filter((entry) => entry.tag_id === tag.id)
+            .reduce((sum, entry) => {
+              const taggedItem = nextItems.find((item) => item.id === entry.item_id);
+              return sum + normalizeItemQuantity(taggedItem?.quantity);
+            }, 0),
           location_count: nextLocationTags.filter((entry) => entry.tag_id === tag.id).length,
         }))
         .filter((tag) => tag.item_count > 0 || tag.location_count > 0)
@@ -1238,8 +1243,8 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                 <DashboardLinkStat
                   href="/items"
                   label="Items"
-                  value={String(items.length)}
-                  description={`${totalItemQuantity} Stück`}
+                  value={String(totalItemQuantity)}
+                  description="Objekte gesamt"
                 />
               </div>
             </div>
@@ -1338,11 +1343,11 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
               {selectedLocation ? (
                 <div className="flex flex-wrap items-center gap-2">
                   <div className="rounded-full bg-gray-100 px-3 py-1 text-sm text-gray-500 dark:bg-gray-800 dark:text-gray-300">
-                    <span className="font-medium text-gray-700 dark:text-gray-100">{directFocusItems.length}</span>{" "}
-                    Items direkt / {directFocusQuantity} Stück
+                    <span className="font-medium text-gray-700 dark:text-gray-100">{directFocusQuantity}</span>{" "}
+                    Objekte direkt
                   </div>
                   <div className="rounded-full bg-green-50 px-3 py-1 text-sm text-green-700 dark:bg-green-950/40 dark:text-green-300">
-                    <span className="font-medium">{nestedFocusItems.length}</span> Items verschachtelt / {nestedFocusQuantity} Stück
+                    <span className="font-medium">{nestedFocusQuantity}</span> Objekte verschachtelt
                   </div>
                   <button
                     type="button"
@@ -2437,12 +2442,7 @@ function ItemCard({ item, locationLabel, onEdit, onMove, onDelete }: ItemCardPro
           }
         />
         <div>
-          <Link
-            href={`/items/${item.id}`}
-            className="font-medium hover:text-blue-600 dark:hover:text-blue-400"
-          >
-          {item.name}
-          </Link>
+          <p className="font-medium">{item.name}</p>
           <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{locationLabel}</p>
           <p className="mt-1 text-xs font-medium text-gray-400 dark:text-gray-500">
             {getItemStatusLabel(item.status)}
@@ -2459,6 +2459,12 @@ function ItemCard({ item, locationLabel, onEdit, onMove, onDelete }: ItemCardPro
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2 border-t border-gray-100 pt-3 dark:border-gray-700">
+        <Link
+          href={`/items/${item.id}`}
+          className="rounded-md px-3 py-1 text-sm font-medium text-gray-800 transition hover:bg-gray-100 dark:text-gray-100 dark:hover:bg-gray-700"
+        >
+          Details
+        </Link>
         <Button variant="ghost" onClick={handleActionClick(() => onEdit(item))}>
           Bearbeiten
         </Button>

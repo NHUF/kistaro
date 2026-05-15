@@ -137,7 +137,7 @@ export function TagDetailPage({ initialData }: { initialData: TagDetailData }) {
 
         <section className="rounded-3xl bg-white p-6 shadow-sm dark:bg-gray-900">
           <div className="grid gap-4 md:grid-cols-2">
-            <DetailField label="Items" value={String(initialData.usage?.item_count ?? 0)} />
+            <DetailField label="Objekte" value={String(initialData.usage?.item_count ?? 0)} />
             <DetailField label="Locations" value={String(initialData.usage?.location_count ?? 0)} />
           </div>
         </section>

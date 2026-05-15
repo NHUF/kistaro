@@ -315,12 +315,16 @@ export async function fetchDashboardData(): Promise<DashboardData> {
   const tags = (tagsResponse.data ?? []) as Tag[];
   const itemTags = (itemTagsResponse.data ?? []) as Array<{ item_id: string; tag_id: string }>;
   const locationTags = (locationTagsResponse.data ?? []) as Array<{ location_id: string; tag_id: string }>;
+  const items = ((itemsResponse.data ?? []) as ItemRecord[]).map(normalizeItemRecord);
+  const quantityByItemId = new Map(items.map((item) => [item.id, normalizeQuantity(item.quantity)]));
 
   const topTags = tags
     .map((tag) => ({
       id: tag.id,
       name: tag.name,
-      item_count: itemTags.filter((entry) => entry.tag_id === tag.id).length,
+      item_count: itemTags
+        .filter((entry) => entry.tag_id === tag.id)
+        .reduce((sum, entry) => sum + (quantityByItemId.get(entry.item_id) ?? 1), 0),
       location_count: locationTags.filter((entry) => entry.tag_id === tag.id).length,
     }))
     .filter((tag) => tag.item_count > 0 || tag.location_count > 0)
@@ -329,7 +333,7 @@ export async function fetchDashboardData(): Promise<DashboardData> {
 
   return {
     locations: (locationsResponse.data ?? []) as LocationRecord[],
-    items: ((itemsResponse.data ?? []) as ItemRecord[]).map(normalizeItemRecord),
+    items,
     templates: ((templatesResponse.data ?? []) as InventoryTemplateRecord[]).map(normalizeTemplateRecord),
     topTags,
     availableTags: tags.map((tag) => tag.name),
@@ -519,25 +523,35 @@ export async function fetchSearchResults(query: string): Promise<SearchResultRec
 }
 
 export async function fetchTagsOverview(): Promise<TagUsageRecord[]> {
-  const [tagsResponse, itemTagsResponse, locationTagsResponse] = await Promise.all([
+  const [tagsResponse, itemTagsResponse, locationTagsResponse, itemsResponse] = await Promise.all([
     supabase.from<Tag[]>("tags").select("id, name").order("name"),
     supabase.from<Array<{ item_id: string; tag_id: string }>>("item_tags").select("item_id, tag_id"),
     supabase.from<Array<{ location_id: string; tag_id: string }>>("location_tags").select("location_id, tag_id"),
+    supabase.from<ItemRecord[]>("items").select("id, quantity"),
   ]);
 
   if (tagsResponse.error) {
     throw new Error(tagsResponse.error.message);
   }
 
+  if (itemsResponse.error) {
+    throw new Error(itemsResponse.error.message);
+  }
+
   const tags = (tagsResponse.data ?? []) as Tag[];
   const itemTags = (itemTagsResponse.data ?? []) as Array<{ item_id: string; tag_id: string }>;
   const locationTags = (locationTagsResponse.data ?? []) as Array<{ location_id: string; tag_id: string }>;
+  const quantityByItemId = new Map(
+    ((itemsResponse.data ?? []) as ItemRecord[]).map((item) => [item.id, normalizeQuantity(item.quantity)]),
+  );
 
   return tags
     .map((tag) => ({
       id: tag.id,
       name: tag.name,
-      item_count: itemTags.filter((entry) => entry.tag_id === tag.id).length,
+      item_count: itemTags
+        .filter((entry) => entry.tag_id === tag.id)
+        .reduce((sum, entry) => sum + (quantityByItemId.get(entry.item_id) ?? 1), 0),
       location_count: locationTags.filter((entry) => entry.tag_id === tag.id).length,
     }))
     .sort((a, b) => {
@@ -568,15 +582,17 @@ export async function fetchTagDetailData(tagId: string): Promise<TagDetailData> 
     (locationTagsResponse.data ?? []).map((entry) => entry.location_id as string)
   );
 
+  const taggedItems = allItems.map(normalizeItemRecord).filter((item) => itemIds.has(item.id));
+
   return {
     tag,
-    items: allItems.map(normalizeItemRecord).filter((item) => itemIds.has(item.id)),
+    items: taggedItems,
     locations: allLocations.filter((location) => locationIds.has(location.id)),
     usage: tag
       ? {
           id: tag.id,
           name: tag.name,
-          item_count: itemIds.size,
+          item_count: taggedItems.reduce((sum, item) => sum + normalizeQuantity(item.quantity), 0),
           location_count: locationIds.size,
         }
       : null,

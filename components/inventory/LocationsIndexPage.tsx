@@ -15,6 +15,16 @@ import type { ItemRecord, LocationRecord } from "@/lib/inventory-data";
 
 type TreeNode = LocationRecord & { children: TreeNode[] };
 
+function normalizeItemQuantity(value: unknown) {
+  const parsedValue = Number(value);
+
+  if (!Number.isFinite(parsedValue) || parsedValue < 1) {
+    return 1;
+  }
+
+  return Math.floor(parsedValue);
+}
+
 function buildLocationTree(locations: LocationRecord[]) {
   const map = new Map<string, TreeNode>();
   const roots: TreeNode[] = [];
@@ -82,7 +92,10 @@ export function LocationsIndexPage({
         return;
       }
 
-      directItemsByLocation.set(item.location_id, (directItemsByLocation.get(item.location_id) ?? 0) + 1);
+      directItemsByLocation.set(
+        item.location_id,
+        (directItemsByLocation.get(item.location_id) ?? 0) + normalizeItemQuantity(item.quantity),
+      );
     });
 
     const totals = new Map<string, number>();
@@ -186,7 +199,7 @@ function LocationHierarchyNode({
                 {getLocationTypeLabel(location.type)}
               </p>
               <h2 className="mt-1 text-base font-semibold">{location.name}</h2>
-              <p className="mt-1 text-xs text-gray-400">{itemCounts.get(location.id) ?? 0} Items</p>
+              <p className="mt-1 text-xs text-gray-400">{itemCounts.get(location.id) ?? 0} Objekte</p>
               {location.icon_name ? (
                 <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
                   Icon: {getMaterialIconLabel(location.icon_name)}

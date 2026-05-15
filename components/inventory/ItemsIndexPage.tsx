@@ -53,6 +53,10 @@ export function ItemsIndexPage({
       );
     });
   }, [initialItems, locations, query]);
+  const visibleQuantity = filteredItems.reduce(
+    (sum, item) => sum + normalizeItemQuantity(item.quantity),
+    0,
+  );
 
   return (
     <div className="min-h-screen bg-gray-100 px-3 py-4 text-gray-800 dark:bg-gray-950 dark:text-gray-100 sm:px-4 lg:px-6">
@@ -65,7 +69,7 @@ export function ItemsIndexPage({
             <h1 className="text-3xl font-semibold">Alle Items</h1>
           </div>
           <div className="inline-flex rounded-full border border-gray-200 bg-white px-4 py-2 text-sm text-gray-500 shadow-sm dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300">
-            {filteredItems.length} sichtbar
+            {visibleQuantity} Objekte sichtbar
           </div>
         </div>
 

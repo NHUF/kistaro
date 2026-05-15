@@ -175,7 +175,7 @@ export function TagsIndexPage({
                 {tag.name}
               </Link>
               <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-                {tag.item_count} Items
+                {tag.item_count} Objekte
                 {tag.location_count ? ` | ${tag.location_count} Locations` : ""}
               </p>
               <div className="mt-4 flex flex-wrap gap-2">
