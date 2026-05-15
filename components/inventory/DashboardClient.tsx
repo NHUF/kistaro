@@ -1459,91 +1459,99 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
       <FloatingCreateButton ariaLabel="Neu anlegen" href="/?create=open&type=item" />
 
       {createOpen && (
-        <Modal>
-          <div className="space-y-3">
-            <h3 className="text-lg font-semibold">Neu anlegen</h3>
+        <Modal size="lg">
+          <div className="space-y-5">
+            <ModalIntro
+              eyebrow="Arbeitsablauf"
+              title="Neu anlegen"
+              description="Erst festlegen, was entstehen soll, dann optional eine Vorlage wählen und danach alle übernommenen Werte fein anpassen."
+            />
 
-            <Select
-              value={createType}
-              onChange={(event) => {
-                const nextType = event.target.value as "item" | "location";
-                setCreateType(nextType);
-                setSelectedTemplateId("");
-                setItemQuantity("1");
-                setItemValue("");
-                setItemPurchaseDate("");
-                setItemLinks([]);
-                setItemTagNames([]);
-                setLocValue("");
-                setLocLinks([]);
-                setLocTagNames([]);
-              }}
-            >
-              <option value="item">Item</option>
-              <option value="location">Location</option>
-            </Select>
+            <FormSection title="1. Ziel festlegen" description="Objekt erstellt einen echten Eintrag. Vorlage speichert wiederverwendbare Standardwerte.">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Select
+                  value={createType}
+                  onChange={(event) => {
+                    const nextType = event.target.value as "item" | "location";
+                    setCreateType(nextType);
+                    setSelectedTemplateId("");
+                    setItemQuantity("1");
+                    setItemValue("");
+                    setItemPurchaseDate("");
+                    setItemLinks([]);
+                    setItemTagNames([]);
+                    setLocValue("");
+                    setLocLinks([]);
+                    setLocTagNames([]);
+                  }}
+                >
+                  <option value="item">Item</option>
+                  <option value="location">Location</option>
+                </Select>
 
-            <div className="grid grid-cols-2 gap-2 rounded-xl bg-gray-100 p-1 dark:bg-gray-800">
-              <button
-                type="button"
-                onClick={() => {
-                  setCreateTarget("object");
-                  setCreateMode("manual");
-                }}
-                className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
-                  createTarget === "object"
-                    ? "bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white"
-                    : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-                }`}
-              >
-                Objekt
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setCreateTarget("template");
-                  setCreateMode("manual");
-                }}
-                className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
-                  createTarget === "template"
-                    ? "bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white"
-                    : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-                }`}
-              >
-                Vorlage
-              </button>
-            </div>
-
-            {createTarget === "object" ? (
-              <div className="grid grid-cols-2 gap-2 rounded-xl bg-gray-100 p-1 dark:bg-gray-800">
-              <button
-                type="button"
-                onClick={() => setCreateMode("manual")}
-                className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
-                  createMode === "manual"
-                    ? "bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white"
-                    : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-                }`}
-              >
-                Manuell
-              </button>
-              <button
-                type="button"
-                onClick={() => setCreateMode("template")}
-                className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
-                  createMode === "template"
-                    ? "bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white"
-                    : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-                }`}
-              >
-                Aus Vorlage
-              </button>
+                <div className="grid grid-cols-2 gap-2 rounded-xl bg-gray-100 p-1 dark:bg-gray-800">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCreateTarget("object");
+                      setCreateMode("manual");
+                    }}
+                    className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
+                      createTarget === "object"
+                        ? "bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white"
+                        : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                    }`}
+                  >
+                    Objekt
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCreateTarget("template");
+                      setCreateMode("manual");
+                    }}
+                    className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
+                      createTarget === "template"
+                        ? "bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white"
+                        : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                    }`}
+                  >
+                    Vorlage
+                  </button>
+                </div>
               </div>
-            ) : (
-              <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-500 dark:border-gray-700 dark:bg-gray-800/40 dark:text-gray-400">
-                Der Name wird beim Speichern automatisch als Vorlage gespeichert und mit <code>-0000</code> abgeschlossen.
-              </div>
-            )}
+
+              {createTarget === "object" ? (
+                <div className="grid grid-cols-2 gap-2 rounded-xl bg-gray-100 p-1 dark:bg-gray-800">
+                <button
+                  type="button"
+                  onClick={() => setCreateMode("manual")}
+                  className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
+                    createMode === "manual"
+                      ? "bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white"
+                      : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                  }`}
+                >
+                  Manuell
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCreateMode("template")}
+                  className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
+                    createMode === "template"
+                      ? "bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white"
+                      : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                  }`}
+                >
+                  Aus Vorlage
+                </button>
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-dashed border-gray-200 bg-white px-4 py-3 text-sm text-gray-500 dark:border-gray-700 dark:bg-gray-900/60 dark:text-gray-400">
+                  Der Name wird beim Speichern automatisch als Vorlage gespeichert und mit <code>-0000</code> abgeschlossen.
+                </div>
+              )}
+            </FormSection>
 
             {createTarget === "object" && createMode === "template" ? (
               <>
@@ -1919,9 +1927,13 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
       )}
 
       {editLocation && (
-        <Modal>
-          <div className="space-y-3">
-            <h3 className="text-lg font-semibold">Location bearbeiten</h3>
+        <Modal size="lg">
+          <div className="space-y-4">
+            <ModalIntro
+              eyebrow="Bearbeiten"
+              title="Location bearbeiten"
+              description="Stammdaten, Position, Preis, Bild und Links sind hier gesammelt. Verschieben passiert automatisch über Parent / Ziel-Location."
+            />
             <FieldInfo label="ID" value={editLocation.id} />
             <FieldInfo
               label="Parent"
@@ -2085,9 +2097,13 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
       )}
 
       {editItem && (
-        <Modal>
-          <div className="space-y-3">
-            <h3 className="text-lg font-semibold">Item bearbeiten</h3>
+        <Modal size="lg">
+          <div className="space-y-4">
+            <ModalIntro
+              eyebrow="Bearbeiten"
+              title="Item bearbeiten"
+              description="Alle wichtigen Eigenschaften sind hier an einem Ort. Für reine Mengenänderungen kannst du auf der Detailseite direkt die Anzahl nutzen."
+            />
             <FieldInfo label="ID" value={editItem.id} />
             <FieldInfo
               label="Erstellt"
@@ -2485,6 +2501,48 @@ function FieldInfo({ label, value }: { label: string; value: string }) {
       <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">{label}</p>
       <p className="mt-1 break-all text-gray-600 dark:text-gray-300">{value}</p>
     </div>
+  );
+}
+
+function ModalIntro({
+  description,
+  eyebrow,
+  title,
+}: {
+  description: string;
+  eyebrow: string;
+  title: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-green-100 bg-green-50 px-4 py-3 dark:border-green-900/60 dark:bg-green-950/30">
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-green-700 dark:text-green-300">
+        {eyebrow}
+      </p>
+      <h3 className="mt-1 text-xl font-semibold text-gray-900 dark:text-gray-50">{title}</h3>
+      <p className="mt-1 text-sm leading-6 text-gray-600 dark:text-gray-300">{description}</p>
+    </div>
+  );
+}
+
+function FormSection({
+  children,
+  description,
+  title,
+}: {
+  children: ReactNode;
+  description?: string;
+  title: string;
+}) {
+  return (
+    <section className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800/40">
+      <div className="mb-3">
+        <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-50">{title}</h4>
+        {description ? (
+          <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">{description}</p>
+        ) : null}
+      </div>
+      <div className="space-y-3">{children}</div>
+    </section>
   );
 }
 

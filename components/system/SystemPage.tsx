@@ -126,14 +126,13 @@ export function SystemPage({ status }: Props) {
     setRestoreMessage(null);
 
     startRestoreTransition(async () => {
+      const formData = new FormData();
+      formData.append("mode", "replace");
+      formData.append("file", selectedFile);
+
       const response = await fetch("/api/system/backup", {
         method: "POST",
-        headers: {
-          "Content-Type": selectedFile.type || "application/zip",
-          "X-Kistaro-Restore-Mode": "replace",
-          "X-Kistaro-Backup-Name": selectedFile.name,
-        },
-        body: selectedFile,
+        body: formData,
       });
 
       const result = (await response.json()) as { error?: string; message?: string };
@@ -606,12 +605,18 @@ export function SystemPage({ status }: Props) {
                 <p className="text-xs text-gray-500 dark:text-gray-400">
                   Unterstützt wird aktuell Wiederherstellen mit Ersetzen. Storage-Dateien werden geprüft.
                 </p>
+                {selectedFile ? (
+                  <p className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-800 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200">
+                    Ausgewählt: <span className="font-medium">{selectedFile.name}</span> (
+                    {Math.max(1, Math.round(selectedFile.size / 1024))} KB)
+                  </p>
+                ) : null}
               </div>
 
               <button
                 type="button"
                 onClick={uploadBackupReplace}
-                disabled={restorePending}
+                disabled={restorePending || !selectedFile}
                 className="inline-flex items-center gap-2 rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <MdUploadFile className="h-4 w-4" />

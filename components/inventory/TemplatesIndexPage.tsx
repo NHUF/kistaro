@@ -777,9 +777,17 @@ function TemplateModal({
   const effectiveEntityType = lockEntityType ? lockedEntityType ?? form.entityType : form.entityType;
 
   return (
-    <Modal>
-      <div className="space-y-3">
-        <h3 className="text-lg font-semibold">{title}</h3>
+    <Modal size="lg">
+      <div className="space-y-4">
+        <div className="rounded-2xl border border-green-100 bg-green-50 px-4 py-3 dark:border-green-900/60 dark:bg-green-950/30">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-green-700 dark:text-green-300">
+            Vorlagen-Workflow
+          </p>
+          <h3 className="mt-1 text-xl font-semibold">{title}</h3>
+          <p className="mt-1 text-sm leading-6 text-gray-600 dark:text-gray-300">
+            Vorlagen speichern Standardwerte. Beim späteren Erstellen wird alles übernommen, bleibt aber bearbeitbar.
+          </p>
+        </div>
         {lockEntityType ? (
           <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-sm text-gray-600 dark:border-gray-700 dark:bg-gray-800/60 dark:text-gray-300">
             Typ: <span className="font-medium">{getEntityLabel(effectiveEntityType)}</span>

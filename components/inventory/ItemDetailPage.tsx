@@ -604,9 +604,17 @@ export function ItemDetailPage({
       </div>
 
       {editOpen ? (
-        <Modal>
-          <div className="space-y-3">
-            <h3 className="text-lg font-semibold">Item bearbeiten</h3>
+        <Modal size="lg">
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-green-100 bg-green-50 px-4 py-3 dark:border-green-900/60 dark:bg-green-950/30">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-green-700 dark:text-green-300">
+                Item-Workflow
+              </p>
+              <h3 className="mt-1 text-xl font-semibold">Item bearbeiten</h3>
+              <p className="mt-1 text-sm leading-6 text-gray-600 dark:text-gray-300">
+                Hier bearbeitest du Stammdaten, Location, Medien, Tags und Links. Die Anzahl kann auch direkt in der Schnellinfo geändert werden.
+              </p>
+            </div>
             <Input value={editName} onChange={(event) => setEditName(event.target.value)} />
             <Select
               value={editLocation ?? ""}

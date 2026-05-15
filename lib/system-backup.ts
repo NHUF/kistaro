@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { inflateRawSync } from "node:zlib";
 import {
   existsSync,
   mkdirSync,
@@ -141,7 +142,7 @@ function createZip(entries: ZipEntry[]) {
   return Buffer.concat([...localParts, centralDirectory, endOfCentralDirectory]);
 }
 
-function extractZipEntries(zipBuffer: Buffer) {
+function extractZipEntriesFromLocalHeaders(zipBuffer: Buffer) {
   const entries = new Map<string, Buffer>();
   let offset = 0;
 
@@ -187,6 +188,119 @@ function extractZipEntries(zipBuffer: Buffer) {
   }
 
   return entries;
+}
+
+function findEndOfCentralDirectory(zipBuffer: Buffer) {
+  const minimumOffset = Math.max(0, zipBuffer.length - 65557);
+
+  for (let offset = zipBuffer.length - 22; offset >= minimumOffset; offset -= 1) {
+    if (zipBuffer.readUInt32LE(offset) === 0x06054b50) {
+      return offset;
+    }
+  }
+
+  return -1;
+}
+
+function extractZipEntriesFromCentralDirectory(zipBuffer: Buffer) {
+  const eocdOffset = findEndOfCentralDirectory(zipBuffer);
+
+  if (eocdOffset < 0) {
+    throw new Error("Backup-ZIP enthält kein gültiges Inhaltsverzeichnis.");
+  }
+
+  const expectedEntries = zipBuffer.readUInt16LE(eocdOffset + 10);
+  const centralDirectorySize = zipBuffer.readUInt32LE(eocdOffset + 12);
+  const centralDirectoryOffset = zipBuffer.readUInt32LE(eocdOffset + 16);
+  const centralDirectoryEnd = centralDirectoryOffset + centralDirectorySize;
+
+  if (centralDirectoryOffset < 0 || centralDirectoryEnd > zipBuffer.length) {
+    throw new Error("Backup-ZIP ist unvollständig oder beschädigt.");
+  }
+
+  const entries = new Map<string, Buffer>();
+  let offset = centralDirectoryOffset;
+
+  for (let entryIndex = 0; entryIndex < expectedEntries; entryIndex += 1) {
+    if (offset + 46 > centralDirectoryEnd || zipBuffer.readUInt32LE(offset) !== 0x02014b50) {
+      throw new Error("Backup-ZIP ist unvollständig oder beschädigt.");
+    }
+
+    const flags = zipBuffer.readUInt16LE(offset + 8);
+    const compressionMethod = zipBuffer.readUInt16LE(offset + 10);
+    const expectedChecksum = zipBuffer.readUInt32LE(offset + 16);
+    const compressedSize = zipBuffer.readUInt32LE(offset + 20);
+    const uncompressedSize = zipBuffer.readUInt32LE(offset + 24);
+    const fileNameLength = zipBuffer.readUInt16LE(offset + 28);
+    const extraLength = zipBuffer.readUInt16LE(offset + 30);
+    const commentLength = zipBuffer.readUInt16LE(offset + 32);
+    const localHeaderOffset = zipBuffer.readUInt32LE(offset + 42);
+    const fileNameStart = offset + 46;
+    const fileNameEnd = fileNameStart + fileNameLength;
+    const nextOffset = fileNameEnd + extraLength + commentLength;
+
+    if (fileNameEnd > centralDirectoryEnd || nextOffset > centralDirectoryEnd) {
+      throw new Error("Backup-ZIP ist unvollständig oder beschädigt.");
+    }
+
+    if (flags & 1) {
+      throw new Error("Verschlüsselte ZIP-Backups werden nicht unterstützt.");
+    }
+
+    if (compressedSize === 0xffffffff || uncompressedSize === 0xffffffff) {
+      throw new Error("Zip64-Backups werden aktuell nicht unterstützt.");
+    }
+
+    if (compressionMethod !== 0 && compressionMethod !== 8) {
+      throw new Error("Dieses ZIP-Format wird nicht unterstützt.");
+    }
+
+    if (localHeaderOffset + 30 > zipBuffer.length || zipBuffer.readUInt32LE(localHeaderOffset) !== 0x04034b50) {
+      throw new Error("Backup-ZIP ist unvollständig oder beschädigt.");
+    }
+
+    const localFileNameLength = zipBuffer.readUInt16LE(localHeaderOffset + 26);
+    const localExtraLength = zipBuffer.readUInt16LE(localHeaderOffset + 28);
+    const contentStart = localHeaderOffset + 30 + localFileNameLength + localExtraLength;
+    const contentEnd = contentStart + compressedSize;
+
+    if (contentEnd > zipBuffer.length) {
+      throw new Error("Backup-ZIP ist unvollständig oder beschädigt.");
+    }
+
+    const fileName = zipBuffer.subarray(fileNameStart, fileNameEnd).toString("utf8");
+    const compressedContent = zipBuffer.subarray(contentStart, contentEnd);
+    const content = compressionMethod === 8 ? inflateRawSync(compressedContent) : compressedContent;
+
+    if (content.length !== uncompressedSize) {
+      throw new Error(`Backup-Datei ${fileName} ist unvollständig.`);
+    }
+
+    if (crc32(content) !== expectedChecksum) {
+      throw new Error(`Backup-Datei ${fileName} ist beschädigt.`);
+    }
+
+    entries.set(fileName, content);
+    offset = nextOffset;
+  }
+
+  return entries;
+}
+
+function extractZipEntries(zipBuffer: Buffer) {
+  if (zipBuffer.length < 4 || zipBuffer.readUInt32LE(0) !== 0x04034b50) {
+    throw new Error("Bitte ein gültiges Kistaro-Backup als ZIP-Datei hochladen.");
+  }
+
+  try {
+    return extractZipEntriesFromCentralDirectory(zipBuffer);
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("Inhaltsverzeichnis")) {
+      return extractZipEntriesFromLocalHeaders(zipBuffer);
+    }
+
+    throw error;
+  }
 }
 
 function assertSafeBackupPath(path: string) {
