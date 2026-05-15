@@ -94,6 +94,7 @@ export type DashboardData = {
   items: ItemRecord[];
   templates: InventoryTemplateRecord[];
   topTags: TagUsageRecord[];
+  availableTags: string[];
 };
 
 export type SearchResultRecord = {
@@ -129,6 +130,7 @@ export type InventoryTemplateRecord = {
   item_purchase_date?: string | null;
   location_value?: number | null;
   links?: Array<{ label: string; url: string }> | null;
+  tag_names?: string[] | null;
   created_at?: string;
 };
 
@@ -169,6 +171,9 @@ function normalizeTemplateRecord<T extends InventoryTemplateRecord>(template: T)
   return {
     ...template,
     item_purchase_date: normalizeNullableDateValue(template.item_purchase_date),
+    tag_names: Array.isArray(template.tag_names)
+      ? template.tag_names.filter((tagName): tagName is string => typeof tagName === "string" && tagName.trim() !== "")
+      : [],
   };
 }
 
@@ -307,6 +312,7 @@ export async function fetchDashboardData(): Promise<DashboardData> {
     items: ((itemsResponse.data ?? []) as ItemRecord[]).map(normalizeItemRecord),
     templates: ((templatesResponse.data ?? []) as InventoryTemplateRecord[]).map(normalizeTemplateRecord),
     topTags,
+    availableTags: tags.map((tag) => tag.name),
   };
 }
 
@@ -596,6 +602,16 @@ export async function fetchTemplatesOverview(): Promise<InventoryTemplateRecord[
   }
 
   return ((data ?? []) as InventoryTemplateRecord[]).map(normalizeTemplateRecord);
+}
+
+export async function fetchAvailableTags(): Promise<string[]> {
+  const { data, error } = await supabase.from<Tag[]>("tags").select("id, name").order("name");
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data ?? []).map((tag) => tag.name);
 }
 
 export async function fetchInventoryActivity(limit = 200): Promise<InventoryActivityRecord[]> {

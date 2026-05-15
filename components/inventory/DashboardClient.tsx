@@ -29,6 +29,7 @@ import {
   toResourceLinkDrafts,
   type ResourceLinkDraft,
 } from "@/components/inventory/ResourceLinksEditor";
+import { TagDraftEditor } from "@/components/inventory/TagDraftEditor";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
@@ -107,6 +108,10 @@ function isUnknownLocationValueColumn(errorMessage: string) {
   return errorMessage.includes("location_value") && errorMessage.toLowerCase().includes("column");
 }
 
+function isUnknownTemplateTagColumn(errorMessage: string) {
+  return errorMessage.includes("tag_names") && errorMessage.toLowerCase().includes("column");
+}
+
 export function DashboardClient({ initialData }: { initialData: DashboardData }) {
   const handledCreateIntentRef = useRef(false);
   const [locations, setLocations] = useState<Location[]>(initialData.locations as Location[]);
@@ -114,6 +119,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
   const [items, setItems] = useState<Item[]>(initialData.items as Item[]);
   const [templates, setTemplates] = useState<InventoryTemplate[]>((initialData.templates ?? []) as InventoryTemplate[]);
   const [topTags, setTopTags] = useState<TagUsage[]>(initialData.topTags as TagUsage[]);
+  const [availableTags, setAvailableTags] = useState<string[]>(initialData.availableTags ?? []);
   const [selectedLocation, setSelectedLocation] = useState<string | null>(
     getInitialSelectedLocation(initialData.locations as Location[])
   );
@@ -121,6 +127,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
     () => new Set((initialData.locations as Location[]).filter((location) => !location.parent_id).map((location) => location.id))
   );
   const [dashboardQuery, setDashboardQuery] = useState("");
+  const [focusScope, setFocusScope] = useState<"direct" | "nested">("direct");
 
   const [moveLocationId, setMoveLocationId] = useState<string | null>(null);
   const [moveTarget, setMoveTarget] = useState<string | null>(null);
@@ -166,6 +173,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
   const [itemIcon, setItemIcon] = useState("");
   const [itemImageFile, setItemImageFile] = useState<File | null>(null);
   const [itemLinks, setItemLinks] = useState<ResourceLinkDraft[]>([]);
+  const [itemTagNames, setItemTagNames] = useState<string[]>([]);
   const [locName, setLocName] = useState("");
   const [locParent, setLocParent] = useState<string | null>(null);
   const [locType, setLocType] = useState<LocationType | "">("");
@@ -174,6 +182,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
   const [locIcon, setLocIcon] = useState("");
   const [locImageFile, setLocImageFile] = useState<File | null>(null);
   const [locLinks, setLocLinks] = useState<ResourceLinkDraft[]>([]);
+  const [locTagNames, setLocTagNames] = useState<string[]>([]);
 
   useEffect(() => {
     if (handledCreateIntentRef.current) {
@@ -219,6 +228,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
       setItemIcon("");
       setItemImageFile(null);
       setItemLinks([]);
+      setItemTagNames([]);
       setLocName("");
       setLocParent(nextType === "location" ? selectedLocation : null);
       setLocType("");
@@ -227,6 +237,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
       setLocIcon("");
       setLocImageFile(null);
       setLocLinks([]);
+      setLocTagNames([]);
 
       if (typeof window !== "undefined") {
         window.sessionStorage.removeItem("inventory-create-intent");
@@ -273,6 +284,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
         .sort((a, b) => b.item_count + b.location_count - (a.item_count + a.location_count))
         .slice(0, 8)
     );
+    setAvailableTags(nextTags.map((tag) => tag.name));
 
     setSelectedLocation((current) => {
       if (!current) {
@@ -304,6 +316,12 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
       return supabase.from<InventoryTemplate[]>("inventory_templates").insert(fallbackPayload);
     }
 
+    if (response.error && isUnknownTemplateTagColumn(response.error.message)) {
+      const fallbackPayload = { ...payload };
+      delete fallbackPayload.tag_names;
+      return supabase.from<InventoryTemplate[]>("inventory_templates").insert(fallbackPayload);
+    }
+
     return response;
   }
 
@@ -325,6 +343,32 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
         link_label: link.label,
         link_url: link.url,
       });
+
+      if (error) {
+        throw new Error(error.message);
+      }
+    }
+  }
+
+  async function attachTagsToEntity(
+    entityType: "item" | "location",
+    entityId: string | null | undefined,
+    tagNames: string[],
+  ) {
+    if (!entityId) {
+      return;
+    }
+
+    const uniqueTagNames = [...new Set(tagNames.map((tagName) => tagName.trim()).filter(Boolean))];
+
+    for (const tagName of uniqueTagNames) {
+      const rpcName = entityType === "item" ? "attach_item_tag" : "attach_location_tag";
+      const args =
+        entityType === "item"
+          ? { target_item_id: entityId, tag_name: tagName }
+          : { target_location_id: entityId, tag_name: tagName };
+
+      const { error } = await supabase.rpc(rpcName, args);
 
       if (error) {
         throw new Error(error.message);
@@ -429,6 +473,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
           createType === "item" ? normalizeDateInputValue(itemPurchaseDate) || null : null,
         location_value: createType === "location" ? nextLocationValue : null,
         links: nextLinks,
+        tag_names: createType === "item" ? itemTagNames : locTagNames,
       });
 
       if (error) {
@@ -504,8 +549,9 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
 
       try {
         await createResourceLinks("location", createdLocationId, locLinks);
+        await attachTagsToEntity("location", createdLocationId, locTagNames);
       } catch (error) {
-        window.alert(error instanceof Error ? error.message : "Links konnten nicht gespeichert werden.");
+        window.alert(error instanceof Error ? error.message : "Location-Daten konnten nicht vollständig gespeichert werden.");
       }
 
       await logInventoryActivity({
@@ -515,6 +561,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
         description: "Neue Location wurde angelegt.",
         metadata: {
           link_count: nextLinks.length,
+          tag_count: locTagNames.length,
           template_id: createMode === "template" ? selectedTemplateId : null,
         },
       });
@@ -574,8 +621,9 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
 
       try {
         await createResourceLinks("item", createdItemId, itemLinks);
+        await attachTagsToEntity("item", createdItemId, itemTagNames);
       } catch (error) {
-        window.alert(error instanceof Error ? error.message : "Links konnten nicht gespeichert werden.");
+        window.alert(error instanceof Error ? error.message : "Item-Daten konnten nicht vollständig gespeichert werden.");
       }
 
       await logInventoryActivity({
@@ -586,6 +634,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
         metadata: {
           location_id: itemLocation,
           link_count: nextLinks.length,
+          tag_count: itemTagNames.length,
           template_id: createMode === "template" ? selectedTemplateId : null,
         },
       });
@@ -931,6 +980,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
     setItemIcon("");
     setItemImageFile(null);
     setItemLinks([]);
+    setItemTagNames([]);
     setLocName("");
     setLocParent(selectedLocation);
     setLocType("");
@@ -939,6 +989,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
     setLocIcon("");
     setLocImageFile(null);
     setLocLinks([]);
+    setLocTagNames([]);
   }
 
   function openLocationEditModal(location: Location) {
@@ -976,6 +1027,25 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
 
   function getItemsForLocation(locationId: string | null) {
     return items.filter((item) => item.location_id === locationId);
+  }
+
+  function getNestedLocationIds(rootLocationId: string | null) {
+    if (!rootLocationId) {
+      return [];
+    }
+
+    const nestedLocationIds: string[] = [];
+
+    function walk(currentLocationId: string) {
+      nestedLocationIds.push(currentLocationId);
+
+      locations
+        .filter((location) => location.parent_id === currentLocationId)
+        .forEach((childLocation) => walk(childLocation.id));
+    }
+
+    walk(rootLocationId);
+    return nestedLocationIds;
   }
 
   function getLocationName(locationId: string | null) {
@@ -1028,7 +1098,12 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
   }
 
   const flatLocations = flattenTree(tree);
-  const visibleItems = getItemsForLocation(selectedLocation);
+  const directFocusItems = selectedLocation ? getItemsForLocation(selectedLocation) : [];
+  const nestedFocusLocationIds = getNestedLocationIds(selectedLocation);
+  const nestedFocusItems = items.filter(
+    (item) => item.location_id != null && nestedFocusLocationIds.includes(item.location_id)
+  );
+  const visibleItems = focusScope === "nested" ? nestedFocusItems : directFocusItems;
   const selectedLocationName = getLocationName(selectedLocation);
   const matchingTemplates = templates.filter((template) => template.entity_type === createType);
   const selectedTemplate = matchingTemplates.find((template) => template.id === selectedTemplateId) ?? null;
@@ -1047,6 +1122,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
         setItemPurchaseDate(normalizeDateInputValue(selectedTemplate.item_purchase_date));
         setItemIcon(selectedTemplate.icon_name ?? "");
         setItemLinks(toResourceLinkDrafts(selectedTemplate.links));
+        setItemTagNames(selectedTemplate.tag_names ?? []);
         return;
       }
 
@@ -1056,6 +1132,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
       setLocValue(selectedTemplate.location_value?.toString() ?? "");
       setLocIcon(selectedTemplate.icon_name ?? "");
       setLocLinks(toResourceLinkDrafts(selectedTemplate.links));
+      setLocTagNames(selectedTemplate.tag_names ?? []);
     }, 0);
 
     return () => window.clearTimeout(timeoutId);
@@ -1184,10 +1261,22 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                 </div>
               </div>
               {selectedLocation ? (
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-2">
                   <div className="rounded-full bg-gray-100 px-3 py-1 text-sm text-gray-500 dark:bg-gray-800 dark:text-gray-300">
-                    {visibleItems.length} Items
+                    <span className="font-medium text-gray-700 dark:text-gray-100">{directFocusItems.length}</span>{" "}
+                    Items direkt
                   </div>
+                  <div className="rounded-full bg-green-50 px-3 py-1 text-sm text-green-700 dark:bg-green-950/40 dark:text-green-300">
+                    <span className="font-medium">{nestedFocusItems.length}</span> Items verschachtelt
+                  </div>
+                  <Select
+                    value={focusScope}
+                    onChange={(event) => setFocusScope(event.target.value as "direct" | "nested")}
+                    className="w-auto min-w-[210px]"
+                  >
+                    <option value="direct">Nur ausgewählte Location</option>
+                    <option value="nested">Location + alles darunter</option>
+                  </Select>
                   <Link
                     href={`/locations/${selectedLocation}`}
                     className="text-sm font-medium text-green-700 hover:text-green-800 dark:text-green-400"
@@ -1205,7 +1294,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                     <ItemCard
                       key={item.id}
                       item={item}
-                      locationLabel={selectedLocationName}
+                      locationLabel={getLocationName(item.location_id)}
                       onEdit={openItemEditModal}
                       onMove={setMoveItemId}
                       onDelete={setDeleteItemId}
@@ -1290,8 +1379,10 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                 setItemValue("");
                 setItemPurchaseDate("");
                 setItemLinks([]);
+                setItemTagNames([]);
                 setLocValue("");
                 setLocLinks([]);
+                setLocTagNames([]);
               }}
             >
               <option value="item">Item</option>
@@ -1400,6 +1491,11 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                         Preis: {selectedTemplate.location_value} EUR
                       </p>
                     ) : null}
+                    {selectedTemplate.tag_names && selectedTemplate.tag_names.length > 0 ? (
+                      <p className="mt-2 text-xs text-gray-400">
+                        Tags: {selectedTemplate.tag_names.join(", ")}
+                      </p>
+                    ) : null}
                   </div>
                 ) : null}
 
@@ -1479,6 +1575,12 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                         </InventoryIconBadge>
                       }
                     />
+                    <TagDraftEditor
+                      label="Tags"
+                      value={itemTagNames}
+                      availableTags={availableTags}
+                      onChange={setItemTagNames}
+                    />
                     <ResourceLinksEditor value={itemLinks} onChange={setItemLinks} />
                   </>
                 ) : (
@@ -1527,6 +1629,12 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                         </InventoryIconBadge>
                       }
                     />
+                    <TagDraftEditor
+                      label="Tags"
+                      value={locTagNames}
+                      availableTags={availableTags}
+                      onChange={setLocTagNames}
+                    />
                     <ResourceLinksEditor value={locLinks} onChange={setLocLinks} />
                   </>
                 )}
@@ -1568,6 +1676,12 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                   type="date"
                   value={itemPurchaseDate}
                   onChange={(event) => setItemPurchaseDate(event.target.value)}
+                />
+                <TagDraftEditor
+                  label="Tags"
+                  value={itemTagNames}
+                  availableTags={availableTags}
+                  onChange={setItemTagNames}
                 />
                 <ResourceLinksEditor value={itemLinks} onChange={setItemLinks} />
 
@@ -1635,6 +1749,12 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                   placeholder="Preis in EUR"
                   value={locValue}
                   onChange={(event) => setLocValue(event.target.value)}
+                />
+                <TagDraftEditor
+                  label="Tags"
+                  value={locTagNames}
+                  availableTags={availableTags}
+                  onChange={setLocTagNames}
                 />
                 <ResourceLinksEditor value={locLinks} onChange={setLocLinks} />
                 <IconPicker

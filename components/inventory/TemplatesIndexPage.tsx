@@ -18,6 +18,7 @@ import {
   toResourceLinkDrafts,
   type ResourceLinkDraft,
 } from "@/components/inventory/ResourceLinksEditor";
+import { TagDraftEditor } from "@/components/inventory/TagDraftEditor";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
@@ -49,6 +50,7 @@ type TemplateFormState = {
   itemPurchaseDate: string;
   locationValue: string;
   links: ResourceLinkDraft[];
+  tagNames: string[];
 };
 
 const EMPTY_FORM: TemplateFormState = {
@@ -64,6 +66,7 @@ const EMPTY_FORM: TemplateFormState = {
   itemPurchaseDate: "",
   locationValue: "",
   links: [],
+  tagNames: [],
 };
 
 function getBaseName(name: string) {
@@ -98,10 +101,16 @@ function isUnknownLocationValueColumn(errorMessage: string) {
   return errorMessage.includes("location_value") && errorMessage.toLowerCase().includes("column");
 }
 
+function isUnknownTemplateTagColumn(errorMessage: string) {
+  return errorMessage.includes("tag_names") && errorMessage.toLowerCase().includes("column");
+}
+
 export function TemplatesIndexPage({
+  availableTags,
   initialQuery = "",
   templates: initialTemplates,
 }: {
+  availableTags: string[];
   initialQuery?: string;
   templates: InventoryTemplateRecord[];
 }) {
@@ -156,6 +165,12 @@ export function TemplatesIndexPage({
       return supabase.from<InventoryTemplateRecord[]>("inventory_templates").insert(fallbackPayload);
     }
 
+    if (response.error && isUnknownTemplateTagColumn(response.error.message)) {
+      const fallbackPayload = { ...payload };
+      delete fallbackPayload.tag_names;
+      return supabase.from<InventoryTemplateRecord[]>("inventory_templates").insert(fallbackPayload);
+    }
+
     return response;
   }
 
@@ -168,6 +183,15 @@ export function TemplatesIndexPage({
     if (response.error && isUnknownLocationValueColumn(response.error.message)) {
       const fallbackPayload = { ...payload };
       delete fallbackPayload.location_value;
+      return supabase
+        .from<InventoryTemplateRecord[]>("inventory_templates")
+        .update(fallbackPayload)
+        .eq("id", templateId);
+    }
+
+    if (response.error && isUnknownTemplateTagColumn(response.error.message)) {
+      const fallbackPayload = { ...payload };
+      delete fallbackPayload.tag_names;
       return supabase
         .from<InventoryTemplateRecord[]>("inventory_templates")
         .update(fallbackPayload)
@@ -204,6 +228,7 @@ export function TemplatesIndexPage({
       itemPurchaseDate: normalizeDateInputValue(template.item_purchase_date),
       locationValue: template.location_value?.toString() ?? "",
       links: toResourceLinkDrafts(template.links),
+      tagNames: template.tag_names ?? [],
     });
     setEditTemplate(template);
   }
@@ -254,6 +279,7 @@ export function TemplatesIndexPage({
           form.entityType === "item" ? normalizeDateInputValue(form.itemPurchaseDate) || null : null,
         location_value: form.entityType === "location" ? nextLocationValue : null,
         links: nextLinks,
+        tag_names: form.tagNames,
       });
 
       if (error) {
@@ -329,6 +355,7 @@ export function TemplatesIndexPage({
           form.entityType === "item" ? normalizeDateInputValue(form.itemPurchaseDate) || null : null,
         location_value: form.entityType === "location" ? nextLocationValue : null,
         links: nextLinks,
+        tag_names: form.tagNames,
       });
 
       if (error) {
@@ -514,6 +541,15 @@ export function TemplatesIndexPage({
                   </span>
                 </div>
               ) : null}
+              {template.tag_names && template.tag_names.length > 0 ? (
+                <div className="mt-4 flex flex-wrap gap-2 text-xs text-gray-400">
+                  {template.tag_names.map((tagName) => (
+                    <span key={`${template.id}-${tagName}`} className="rounded-full bg-gray-100 px-3 py-2 dark:bg-gray-800">
+                      {tagName}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
             </article>
           ))}
         </section>
@@ -523,6 +559,7 @@ export function TemplatesIndexPage({
 
       {createOpen ? (
         <TemplateModal
+          availableTags={availableTags}
           busy={busy}
           form={form}
           onCancel={() => {
@@ -537,6 +574,7 @@ export function TemplatesIndexPage({
 
       {editTemplate ? (
         <TemplateModal
+          availableTags={availableTags}
           busy={busy}
           currentImagePath={editTemplate.image_path}
           form={form}
@@ -573,6 +611,7 @@ export function TemplatesIndexPage({
 }
 
 function TemplateModal({
+  availableTags,
   busy,
   currentImagePath = null,
   form,
@@ -583,6 +622,7 @@ function TemplateModal({
   onSubmit,
   title,
 }: {
+  availableTags: string[];
   busy: boolean;
   currentImagePath?: string | null;
   form: TemplateFormState;
@@ -593,13 +633,15 @@ function TemplateModal({
   onSubmit: () => void;
   title: string;
 }) {
+  const effectiveEntityType = lockEntityType ? lockedEntityType ?? form.entityType : form.entityType;
+
   return (
     <Modal>
       <div className="space-y-3">
         <h3 className="text-lg font-semibold">{title}</h3>
         {lockEntityType ? (
           <div className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-sm text-gray-600 dark:border-gray-700 dark:bg-gray-800/60 dark:text-gray-300">
-            Typ: <span className="font-medium">{getEntityLabel(lockedEntityType ?? form.entityType)}</span>
+            Typ: <span className="font-medium">{getEntityLabel(effectiveEntityType)}</span>
           </div>
         ) : (
           <Select
@@ -613,6 +655,7 @@ function TemplateModal({
                 itemPurchaseDate: "",
                 locationValue: "",
                 links: [],
+                tagNames: [],
               })
             }
           >
@@ -632,7 +675,7 @@ function TemplateModal({
           className="min-h-24 w-full rounded-md border bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-700"
         />
 
-        {form.entityType === "location" ? (
+        {effectiveEntityType === "location" ? (
           <>
             <Select
               value={form.locationType}
@@ -689,6 +732,12 @@ function TemplateModal({
           onChange={(nextValue) => onChange({ iconName: nextValue })}
           emptyLabel="Kein fixes Icon"
         />
+        <TagDraftEditor
+          label="Tags"
+          value={form.tagNames}
+          availableTags={availableTags}
+          onChange={(tagNames) => onChange({ tagNames })}
+        />
         <ImagePicker
           label="Vorlagenbild"
           currentImagePath={currentImagePath}
@@ -698,7 +747,7 @@ function TemplateModal({
           onRemoveChange={(remove) => onChange({ removeImage: remove })}
           fallback={
             <InventoryIconBadge className="h-16 w-16 rounded-3xl bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-300">
-              {form.entityType === "item" ? (
+              {effectiveEntityType === "item" ? (
                 <ItemStatusIcon status={form.itemStatus || null} iconName={form.iconName || null} className="h-8 w-8" />
               ) : (
                 <LocationTypeIcon type={form.locationType || null} iconName={form.iconName || null} className="h-8 w-8" />

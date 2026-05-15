@@ -1,5 +1,5 @@
 import { TemplatesIndexPage } from "@/components/inventory/TemplatesIndexPage";
-import { fetchTemplatesOverview } from "@/lib/inventory-data";
+import { fetchAvailableTags, fetchTemplatesOverview } from "@/lib/inventory-data";
 
 export const dynamic = "force-dynamic";
 
@@ -9,7 +9,10 @@ export default async function TemplatesRoute({
   searchParams: Promise<{ q?: string }>;
 }) {
   const params = await searchParams;
-  const templates = await fetchTemplatesOverview();
+  const [templates, availableTags] = await Promise.all([
+    fetchTemplatesOverview(),
+    fetchAvailableTags(),
+  ]);
 
-  return <TemplatesIndexPage templates={templates} initialQuery={params.q ?? ""} />;
+  return <TemplatesIndexPage templates={templates} availableTags={availableTags} initialQuery={params.q ?? ""} />;
 }
