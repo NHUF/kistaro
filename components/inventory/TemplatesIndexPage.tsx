@@ -105,6 +105,62 @@ function isUnknownTemplateTagColumn(errorMessage: string) {
   return errorMessage.includes("tag_names") && errorMessage.toLowerCase().includes("column");
 }
 
+function parseJsonArray(value: string) {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function normalizeTemplateLinks(value: unknown): ResourceLinkDraft[] {
+  const linkSource = typeof value === "string" ? parseJsonArray(value) : value;
+
+  if (!Array.isArray(linkSource)) {
+    return [];
+  }
+
+  return toResourceLinkDrafts(
+    linkSource.filter(
+      (link): link is { id?: string; label: string; url: string } =>
+        Boolean(link) && typeof link === "object",
+    ) as Array<{ id?: string; label: string; url: string }>,
+  );
+}
+
+function normalizeTemplateTagNames(value: unknown): string[] {
+  const tagSource =
+    typeof value === "string" && value.trim().startsWith("[")
+      ? parseJsonArray(value)
+      : value;
+
+  if (Array.isArray(tagSource)) {
+    return tagSource
+      .filter((tagName): tagName is string => typeof tagName === "string")
+      .map((tagName) => tagName.trim())
+      .filter(Boolean);
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    return value
+      .replace(/^\{|\}$/g, "")
+      .split(",")
+      .map((tagName) => tagName.replace(/^"|"$/g, "").trim())
+      .filter(Boolean);
+  }
+
+  return [];
+}
+
+function normalizeTemplateForClient(template: InventoryTemplateRecord): InventoryTemplateRecord {
+  return {
+    ...template,
+    links: normalizeTemplateLinks(template.links),
+    tag_names: normalizeTemplateTagNames(template.tag_names),
+  };
+}
+
 export function TemplatesIndexPage({
   availableTags,
   initialQuery = "",
@@ -115,7 +171,7 @@ export function TemplatesIndexPage({
   templates: InventoryTemplateRecord[];
 }) {
   const router = useRouter();
-  const [templates, setTemplates] = useState(initialTemplates);
+  const [templates, setTemplates] = useState(initialTemplates.map(normalizeTemplateForClient));
   const [query, setQuery] = useState(initialQuery);
   const [createOpen, setCreateOpen] = useState(false);
   const [editTemplate, setEditTemplate] = useState<InventoryTemplateRecord | null>(null);
@@ -153,7 +209,7 @@ export function TemplatesIndexPage({
       return;
     }
 
-    setTemplates((data ?? []) as InventoryTemplateRecord[]);
+    setTemplates(((data ?? []) as InventoryTemplateRecord[]).map(normalizeTemplateForClient));
   }
 
   async function insertTemplate(payload: Partial<InventoryTemplateRecord>) {
@@ -215,22 +271,24 @@ export function TemplatesIndexPage({
   }
 
   function openEditModal(template: InventoryTemplateRecord) {
+    const safeTemplate = normalizeTemplateForClient(template);
+
     setForm({
-      entityType: template.entity_type,
-      baseName: getBaseName(template.name),
-      description: template.description ?? "",
-      locationType: template.location_type ?? "",
-      itemStatus: template.item_status ?? "",
-      iconName: template.icon_name ?? "",
+      entityType: safeTemplate.entity_type,
+      baseName: getBaseName(safeTemplate.name),
+      description: safeTemplate.description ?? "",
+      locationType: safeTemplate.location_type ?? "",
+      itemStatus: safeTemplate.item_status ?? "",
+      iconName: safeTemplate.icon_name ?? "",
       imageFile: null,
       removeImage: false,
-      itemValue: template.item_value?.toString() ?? "",
-      itemPurchaseDate: normalizeDateInputValue(template.item_purchase_date),
-      locationValue: template.location_value?.toString() ?? "",
-      links: toResourceLinkDrafts(template.links),
-      tagNames: template.tag_names ?? [],
+      itemValue: safeTemplate.item_value?.toString() ?? "",
+      itemPurchaseDate: normalizeDateInputValue(safeTemplate.item_purchase_date),
+      locationValue: safeTemplate.location_value?.toString() ?? "",
+      links: normalizeTemplateLinks(safeTemplate.links),
+      tagNames: normalizeTemplateTagNames(safeTemplate.tag_names),
     });
-    setEditTemplate(template);
+    setEditTemplate(safeTemplate);
   }
 
   async function createTemplate() {
