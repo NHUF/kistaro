@@ -35,6 +35,10 @@ const ALLOWED_TABLES = new Set([
   "inventory_resource_links",
 ]);
 
+const JSON_COLUMNS = new Map<string, Set<string>>([
+  ["inventory_templates", new Set(["links"])],
+]);
+
 function assertIdentifier(value: string) {
   if (!/^[a-z_][a-z0-9_]*$/i.test(value)) {
     throw new Error(`Ungültiger SQL-Bezeichner: ${value}`);
@@ -124,6 +128,14 @@ function normalizeRows(payload: unknown) {
   throw new Error("Keine Daten zum Speichern erhalten.");
 }
 
+function normalizeColumnValue(table: string, column: string, value: unknown) {
+  if (!JSON_COLUMNS.get(table)?.has(column) || value == null || typeof value === "string") {
+    return value;
+  }
+
+  return JSON.stringify(value);
+}
+
 async function selectData<T>(request: LocalQueryRequest) {
   const values: unknown[] = [];
   const tableName = getTableName(request.table);
@@ -170,7 +182,7 @@ async function insertData<T>(request: LocalQueryRequest) {
   const values: unknown[] = [];
   const placeholders = rows.map((row) => {
     const rowPlaceholders = columns.map((column) => {
-      values.push(row[column]);
+      values.push(normalizeColumnValue(request.table, column, row[column]));
       return `$${values.length}`;
     });
 
@@ -194,7 +206,7 @@ async function updateData<T>(request: LocalQueryRequest) {
   columns.forEach(assertIdentifier);
 
   const sets = columns.map((column) => {
-    values.push(payload[column]);
+    values.push(normalizeColumnValue(request.table, column, payload[column]));
     return `${quoteIdentifier(column)} = $${values.length}`;
   });
 
