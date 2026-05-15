@@ -10,7 +10,7 @@ TARGET_TAG="${INVENTORY_UPDATE_TARGET_TAG:-}"
 TARBALL_URL="${INVENTORY_UPDATE_TARBALL_URL:-}"
 SERVICE_NAME="${SYSTEMD_SERVICE_NAME:-kistaro}"
 STATUS_FILE="${INVENTORY_UPDATE_STATUS_FILE:-${PROJECT_ROOT}/storage/update-status.json}"
-TOTAL_STEPS=6
+TOTAL_STEPS=7
 STEP_INDEX=0
 
 log() {
@@ -141,13 +141,39 @@ build_release() {
 
 restart_service() {
   if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files "${SERVICE_NAME}.service" >/dev/null 2>&1; then
+    STEP_INDEX=$(( STEP_INDEX + 1 ))
+    local progress=$(( STEP_INDEX * 100 / TOTAL_STEPS ))
+    write_status "running" "Systemdienst ${SERVICE_NAME} wird neu gestartet" "${progress}" "null"
     log "Systemdienst ${SERVICE_NAME} wird neu gestartet"
-    systemctl restart --no-block "${SERVICE_NAME}" >>"${LOG_FILE}" 2>&1 || \
-      log "Systemdienst ${SERVICE_NAME} konnte nicht automatisch neu gestartet werden."
+
+    if systemctl reset-failed "${SERVICE_NAME}" >>"${LOG_FILE}" 2>&1 &&
+      systemctl restart "${SERVICE_NAME}" >>"${LOG_FILE}" 2>&1
+    then
+      for attempt in $(seq 1 30); do
+        if systemctl is-active --quiet "${SERVICE_NAME}"; then
+          log "Systemdienst ${SERVICE_NAME} ist aktiv"
+          return
+        fi
+
+        sleep 1
+      done
+    fi
+
+    {
+      echo
+      echo "== systemctl status ${SERVICE_NAME} =="
+      systemctl status "${SERVICE_NAME}" --no-pager -l || true
+      echo
+      echo "== journalctl -u ${SERVICE_NAME} =="
+      journalctl -u "${SERVICE_NAME}" -n 80 --no-pager || true
+    } >>"${LOG_FILE}" 2>&1
+
+    tail -n 80 "${LOG_FILE}" || true
+    fail "Systemdienst ${SERVICE_NAME} konnte nach dem Update nicht gestartet werden."
     return
   fi
 
-  log "Systemdienst ${SERVICE_NAME} wurde nicht gefunden. Bitte App manuell neu starten."
+  fail "Systemdienst ${SERVICE_NAME} wurde nicht gefunden. Bitte App manuell neu starten."
 }
 
 cleanup() {
@@ -168,9 +194,9 @@ main() {
   download_release
   sync_release
   build_release
-  log "Update auf ${TARGET_TAG} abgeschlossen"
-  write_status "completed" "Update auf ${TARGET_TAG} abgeschlossen. Dienst wird neu gestartet." 100 "\"$(date -Is)\""
   restart_service
+  log "Update auf ${TARGET_TAG} abgeschlossen"
+  write_status "completed" "Update auf ${TARGET_TAG} abgeschlossen. Dienst ist aktiv." 100 "\"$(date -Is)\""
 }
 
 main "$@"

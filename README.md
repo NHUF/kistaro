@@ -88,6 +88,14 @@ Der Update-Ablauf:
 - neuer Build
 - Neustart des Dienstes
 
+### Notfall-Update per Shell
+
+Wenn die Weboberfläche nicht erreichbar ist, kann eine Version direkt per Shell eingespielt werden. Datenbank, Storage, `.env.local` und lokale Konfiguration bleiben erhalten:
+
+```bash
+KISTARO_TAG="v0.1.30" && apt-get -o DPkg::Lock::Timeout=180 update -qq && apt-get -o DPkg::Lock::Timeout=180 install -y -qq ca-certificates curl tar rsync && WORK_DIR="$(mktemp -d)" && curl -fsSL "https://github.com/NHUF/kistaro/archive/refs/tags/${KISTARO_TAG}.tar.gz" | tar -xz -C "${WORK_DIR}" --strip-components=1 && rsync -a --delete --exclude ".env.local" --exclude ".next" --exclude "node_modules" --exclude "storage" --exclude "install-config.txt" --exclude "instance-summary.txt" --exclude "install.log" --exclude "update.log" "${WORK_DIR}/" /opt/kistaro/ && rm -rf "${WORK_DIR}" && cd /opt/kistaro && NODE_ENV=development npm install --include=dev --silent && (chmod +x node_modules/.bin/next node_modules/next/dist/bin/next 2>/dev/null || true) && npm run --silent db:migrate && NODE_ENV=production npm run --silent build && systemctl daemon-reload && systemctl restart kistaro && systemctl status kistaro --no-pager -l
+```
+
 ## Datenbank
 
 Frische Installationen starten leer:
