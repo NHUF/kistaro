@@ -150,13 +150,14 @@ export function ItemDetailPage({
     }
   }
 
-  const locationName = useMemo(() => {
+  const currentLocation = useMemo(() => {
     if (!item?.location_id) {
-      return "Keine Location";
+      return null;
     }
 
-    return locations.find((location) => location.id === item.location_id)?.name ?? "Unbekannt";
+    return locations.find((location) => location.id === item.location_id) ?? null;
   }, [item, locations]);
+  const locationName = item?.location_id ? currentLocation?.name ?? "Unbekannt" : "Keine Location";
 
   const safeAssignedTags = Array.isArray(assignedTags)
     ? assignedTags.filter((tag) => tag && typeof tag.id === "string" && typeof tag.name === "string")
@@ -433,9 +434,18 @@ export function ItemDetailPage({
                 <span className="rounded-full bg-green-50 px-3 py-1 text-sm font-medium text-green-700 dark:bg-green-950/40 dark:text-green-300">
                   {getItemStatusLabel(item.status)}
                 </span>
-                <span className="rounded-full bg-gray-100 px-3 py-1 text-sm text-gray-600 dark:bg-gray-800 dark:text-gray-300">
-                  {locationName}
-                </span>
+                {currentLocation ? (
+                  <Link
+                    href={`/locations/${currentLocation.id}`}
+                    className="rounded-full bg-gray-100 px-3 py-1 text-sm text-gray-600 transition hover:bg-gray-200 hover:text-gray-900 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 dark:hover:text-white"
+                  >
+                    {locationName}
+                  </Link>
+                ) : (
+                  <span className="rounded-full bg-gray-100 px-3 py-1 text-sm text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                    {locationName}
+                  </span>
+                )}
                 <span className="rounded-full bg-green-50 px-3 py-1 text-sm font-semibold text-green-700 dark:bg-green-950/40 dark:text-green-300">
                   Anzahl: {normalizeItemQuantity(item.quantity)}
                 </span>
@@ -501,9 +511,6 @@ export function ItemDetailPage({
                     <p className="text-xs font-semibold uppercase tracking-[0.16em] text-green-700 dark:text-green-300">
                       Anzahl
                     </p>
-                    <p className="mt-1 text-sm text-green-800 dark:text-green-200">
-                      Direkt anpassbar, ohne den Bearbeiten-Dialog zu öffnen.
-                    </p>
                   </div>
                   <span className="rounded-full bg-white px-3 py-1 text-sm font-semibold text-green-700 shadow-sm dark:bg-gray-900 dark:text-green-300">
                     {normalizeItemQuantity(item.quantity)}x
@@ -542,7 +549,19 @@ export function ItemDetailPage({
                 </div>
               </div>
               <div className="mt-4 grid gap-3">
-                <DetailField label="Location" value={locationName} />
+                <div className="rounded-2xl border border-gray-100 bg-white px-4 py-3 dark:border-gray-800 dark:bg-gray-900">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-400">Location</p>
+                  {currentLocation ? (
+                    <Link
+                      href={`/locations/${currentLocation.id}`}
+                      className="mt-1 inline-flex text-sm font-medium text-green-700 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300"
+                    >
+                      {locationName}
+                    </Link>
+                  ) : (
+                    <p className="mt-1 text-sm text-gray-700 dark:text-gray-200">{locationName}</p>
+                  )}
+                </div>
                 <DetailField label="Status" value={getItemStatusLabel(item.status)} />
                 <DetailField label="Anzahl" value={`${normalizeItemQuantity(item.quantity)}x`} />
                 <DetailField label="Preis" value={formatPrice(item.value)} />
@@ -590,8 +609,8 @@ export function ItemDetailPage({
         </SectionErrorBoundary>
 
         <SectionErrorBoundary
-          fallbackTitle="Verknuepfte Items"
-          fallbackDescription="Die Verknuepfungen dieses Items konnten nicht geladen werden."
+          fallbackTitle="Verknüpfte Items"
+          fallbackDescription="Die Verknüpfungen dieses Items konnten nicht geladen werden."
         >
           <RelatedItemsManager
             currentItem={item}
@@ -608,12 +627,9 @@ export function ItemDetailPage({
           <div className="space-y-4">
             <div className="rounded-2xl border border-green-100 bg-green-50 px-4 py-3 dark:border-green-900/60 dark:bg-green-950/30">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-green-700 dark:text-green-300">
-                Item-Workflow
+                Bearbeiten
               </p>
               <h3 className="mt-1 text-xl font-semibold">Item bearbeiten</h3>
-              <p className="mt-1 text-sm leading-6 text-gray-600 dark:text-gray-300">
-                Hier bearbeitest du Stammdaten, Location, Medien, Tags und Links. Die Anzahl kann auch direkt in der Schnellinfo geändert werden.
-              </p>
             </div>
             <Input value={editName} onChange={(event) => setEditName(event.target.value)} />
             <Select
@@ -708,9 +724,6 @@ export function ItemDetailPage({
         <Modal>
           <div className="space-y-3">
             <h3 className="text-lg font-semibold">Item löschen</h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              Das Item wird direkt entfernt.
-            </p>
             <div className="flex justify-between">
               <Button onClick={() => setDeleteOpen(false)}>Abbrechen</Button>
               <Button variant="danger" onClick={() => void deleteItem()}>

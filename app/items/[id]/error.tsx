@@ -21,7 +21,7 @@ export default function ItemDetailError({
       entityId={entityId}
       entityLabel="Item"
       backHref="/items"
-      backLabel="Zur Item-Uebersicht"
+      backLabel="Zur Item-Übersicht"
     />
   );
 }

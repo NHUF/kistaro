@@ -22,7 +22,7 @@ export default async function LocationDetailsRoute({
         entityId={id}
         entityLabel="Location"
         backHref="/locations"
-        backLabel="Zur Location-Uebersicht"
+        backLabel="Zur Location-Übersicht"
       />
     );
   }

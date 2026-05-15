@@ -29,6 +29,7 @@ import {
   toResourceLinkDrafts,
   type ResourceLinkDraft,
 } from "@/components/inventory/ResourceLinksEditor";
+import { SectionErrorBoundary } from "@/components/inventory/SectionErrorBoundary";
 import { TagDraftEditor } from "@/components/inventory/TagDraftEditor";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
@@ -2098,11 +2099,14 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
 
       {editItem && (
         <Modal size="lg">
+          <SectionErrorBoundary
+            fallbackTitle="Item bearbeiten"
+            fallbackDescription="Der Bearbeiten-Dialog konnte nicht vollständig geladen werden. Öffne alternativ die Detailseite des Items."
+          >
           <div className="space-y-4">
             <ModalIntro
               eyebrow="Bearbeiten"
               title="Item bearbeiten"
-              description="Alle wichtigen Eigenschaften sind hier an einem Ort. Für reine Mengenänderungen kannst du auf der Detailseite direkt die Anzahl nutzen."
             />
             <FieldInfo label="ID" value={editItem.id} />
             <FieldInfo
@@ -2219,6 +2223,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
               </Button>
             </div>
           </div>
+          </SectionErrorBoundary>
         </Modal>
       )}
 
@@ -2259,9 +2264,6 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
         <Modal>
           <div className="space-y-3">
             <h3 className="text-lg font-semibold">Item löschen</h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              Das Item wird direkt entfernt.
-            </p>
 
             <div className="flex justify-between">
               <Button onClick={() => setDeleteItemId(null)}>Abbrechen</Button>
@@ -2440,7 +2442,11 @@ function ItemCard({ item, locationLabel, onEdit, onMove, onDelete }: ItemCardPro
     return (event: MouseEvent<HTMLButtonElement>) => {
       event.preventDefault();
       event.stopPropagation();
-      action();
+      try {
+        action();
+      } catch (error) {
+        window.alert(error instanceof Error ? error.message : "Aktion konnte nicht geöffnet werden.");
+      }
     };
   }
 
@@ -2481,13 +2487,25 @@ function ItemCard({ item, locationLabel, onEdit, onMove, onDelete }: ItemCardPro
         >
           Details
         </Link>
-        <Button variant="ghost" onClick={handleActionClick(() => onEdit(item))}>
+        <Button
+          variant="ghost"
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={handleActionClick(() => onEdit(item))}
+        >
           Bearbeiten
         </Button>
-        <Button variant="ghost" onClick={handleActionClick(() => onMove(item.id))}>
+        <Button
+          variant="ghost"
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={handleActionClick(() => onMove(item.id))}
+        >
           Verschieben
         </Button>
-        <Button variant="danger" onClick={handleActionClick(() => onDelete(item.id))}>
+        <Button
+          variant="danger"
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={handleActionClick(() => onDelete(item.id))}
+        >
           Löschen
         </Button>
       </div>
@@ -2509,7 +2527,7 @@ function ModalIntro({
   eyebrow,
   title,
 }: {
-  description: string;
+  description?: string;
   eyebrow: string;
   title: string;
 }) {
@@ -2519,7 +2537,9 @@ function ModalIntro({
         {eyebrow}
       </p>
       <h3 className="mt-1 text-xl font-semibold text-gray-900 dark:text-gray-50">{title}</h3>
-      <p className="mt-1 text-sm leading-6 text-gray-600 dark:text-gray-300">{description}</p>
+      {description ? (
+        <p className="mt-1 text-sm leading-6 text-gray-600 dark:text-gray-300">{description}</p>
+      ) : null}
     </div>
   );
 }

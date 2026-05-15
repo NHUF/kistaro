@@ -22,7 +22,7 @@ export default async function ItemDetailsRoute({
         entityId={id}
         entityLabel="Item"
         backHref="/items"
-        backLabel="Zur Item-Uebersicht"
+        backLabel="Zur Item-Übersicht"
       />
     );
   }

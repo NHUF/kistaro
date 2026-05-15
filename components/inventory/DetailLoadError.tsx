@@ -19,8 +19,7 @@ export function DetailLoadError({
         </p>
         <h1 className="mt-3 text-2xl font-semibold">{entityLabel}</h1>
         <p className="mt-3 text-sm text-gray-600 dark:text-gray-300">
-          Die Daten fuer diesen Eintrag konnten gerade nicht vollstaendig gelesen werden.
-          Die Seite bleibt dadurch wenigstens erreichbar, statt komplett abzustuerzen.
+          Die Daten für diesen Eintrag konnten gerade nicht vollständig gelesen werden.
         </p>
         <p className="mt-3 rounded-2xl bg-gray-50 px-4 py-3 text-sm text-gray-500 dark:bg-gray-800 dark:text-gray-300">
           ID: {entityId}

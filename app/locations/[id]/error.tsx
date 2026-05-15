@@ -21,7 +21,7 @@ export default function LocationDetailError({
       entityId={entityId}
       entityLabel="Location"
       backHref="/locations"
-      backLabel="Zur Location-Uebersicht"
+      backLabel="Zur Location-Übersicht"
     />
   );
 }

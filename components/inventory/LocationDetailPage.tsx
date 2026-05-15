@@ -511,12 +511,9 @@ export function LocationDetailPage({
           <div className="space-y-4">
             <div className="rounded-2xl border border-green-100 bg-green-50 px-4 py-3 dark:border-green-900/60 dark:bg-green-950/30">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-green-700 dark:text-green-300">
-                Location-Workflow
+                Bearbeiten
               </p>
               <h3 className="mt-1 text-xl font-semibold">Location bearbeiten</h3>
-              <p className="mt-1 text-sm leading-6 text-gray-600 dark:text-gray-300">
-                Name, Typ, Parent, Bild, Preis, Tags und Links sind hier gesammelt, damit Verschieben und Pflegen in einem Schritt passieren.
-              </p>
             </div>
             <Input value={editName} onChange={(event) => setEditName(event.target.value)} />
             <Select

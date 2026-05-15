@@ -120,18 +120,15 @@ export function ImagePicker({
             htmlFor={libraryInputId}
             className="inline-flex cursor-pointer items-center rounded-md px-3 py-1 text-sm font-medium text-gray-800 transition hover:bg-gray-100 dark:text-gray-100 dark:hover:bg-gray-700"
           >
-            Bild auswaehlen
+            Bild auswählen
           </label>
           <label
             htmlFor={cameraInputId}
             className="inline-flex cursor-pointer items-center rounded-md px-3 py-1 text-sm font-medium text-gray-800 transition hover:bg-gray-100 dark:text-gray-100 dark:hover:bg-gray-700"
           >
-            Hauptkamera oeffnen
+            Kamera öffnen
           </label>
         </div>
-        <p className="text-xs text-gray-400">
-          Auf dem Handy versucht <span className="font-medium">Hauptkamera oeffnen</span> direkt die Rueckkamera zu nutzen.
-        </p>
       </div>
 
       <div className="flex flex-wrap gap-2">
