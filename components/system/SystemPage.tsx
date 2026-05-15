@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { MdCloudDone, MdDataset, MdDownload, MdKey, MdOpenInNew, MdOutlineStorage, MdPowerSettingsNew, MdRefresh, MdSecurity, MdSystemUpdateAlt, MdUploadFile } from "react-icons/md";
+import { MdCloudDone, MdDataset, MdDeleteForever, MdDownload, MdKey, MdOpenInNew, MdOutlineStorage, MdPowerSettingsNew, MdRefresh, MdSecurity, MdSystemUpdateAlt, MdUploadFile } from "react-icons/md";
 import type { IntegrityReport } from "@/lib/system-integrity-types";
 import type { SystemStatusData } from "@/lib/system-status";
 import type { UpdateCheckResult } from "@/lib/system-updates";
@@ -27,11 +27,14 @@ export function SystemPage({ status }: Props) {
   const [integrityReport, setIntegrityReport] = useState<IntegrityReport | null>(null);
   const [integrityMessage, setIntegrityMessage] = useState<string | null>(null);
   const [repairTargets, setRepairTargets] = useState<Record<string, string>>({});
+  const [resetDeleteTemplates, setResetDeleteTemplates] = useState(false);
+  const [resetMessage, setResetMessage] = useState<string | null>(null);
   const [passwordPending, startPasswordTransition] = useTransition();
   const [restorePending, startRestoreTransition] = useTransition();
   const [updatePending, startUpdateTransition] = useTransition();
   const [integrityPending, startIntegrityTransition] = useTransition();
   const [rebootPending, startRebootTransition] = useTransition();
+  const [resetPending, startResetTransition] = useTransition();
 
   function formatDateTime(value: string) {
     return new Date(value).toLocaleString("de-DE");
@@ -326,6 +329,52 @@ export function SystemPage({ status }: Props) {
     });
   }
 
+  async function resetSystem() {
+    const confirmation = window.prompt(
+      resetDeleteTemplates
+        ? "Das leert Inventar, Tags, Dateien und Vorlagen. Zum Bestätigen RESET eingeben."
+        : "Das leert Inventar, Tags und Dateien. Vorlagen bleiben erhalten. Zum Bestätigen RESET eingeben.",
+    );
+
+    if (confirmation !== "RESET") {
+      setResetMessage("Zurücksetzen abgebrochen.");
+      return;
+    }
+
+    setResetMessage(null);
+
+    startResetTransition(async () => {
+      const response = await fetch("/api/system/reset", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          confirm: "RESET",
+          deleteTemplates: resetDeleteTemplates,
+        }),
+      });
+      const result = (await response.json()) as {
+        deletedFiles?: number;
+        error?: string;
+        failedFiles?: string[];
+        message?: string;
+      };
+
+      if (!response.ok) {
+        setResetMessage(result.error ?? "System konnte nicht zurückgesetzt werden.");
+        return;
+      }
+
+      setResetMessage(
+        `${result.message ?? "System wurde zurückgesetzt."} ${result.deletedFiles ?? 0} Dateien entfernt.${
+          result.failedFiles?.length ? ` ${result.failedFiles.length} Dateien konnten nicht entfernt werden.` : ""
+        }`,
+      );
+      window.setTimeout(() => window.location.assign("/"), 900);
+    });
+  }
+
   useEffect(() => {
     if (!updatePolling) {
       return;
@@ -577,6 +626,53 @@ export function SystemPage({ status }: Props) {
             ) : null}
           </section>
         </div>
+
+        <section className="rounded-2xl border border-red-200 bg-white p-4 shadow-sm dark:border-red-900/60 dark:bg-gray-900">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex items-center gap-3">
+              <span className="rounded-2xl bg-red-100 p-3 dark:bg-red-950/40">
+                <MdDeleteForever className="h-6 w-6 text-red-700 dark:text-red-300" />
+              </span>
+              <div>
+                <h2 className="text-lg font-semibold">System zurücksetzen</h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Leert Inventar, Tags, Verknüpfungen, Log und Dateien. Das Passwort bleibt erhalten.
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={resetSystem}
+              disabled={resetPending}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-700 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <MdDeleteForever className="h-4 w-4" />
+              {resetPending ? "Wird zurückgesetzt..." : "Alles leeren"}
+            </button>
+          </div>
+
+          <label className="mt-4 flex items-start gap-3 rounded-xl border border-red-100 bg-red-50 px-3 py-3 text-sm text-red-900 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-100">
+            <input
+              type="checkbox"
+              checked={resetDeleteTemplates}
+              onChange={(event) => setResetDeleteTemplates(event.target.checked)}
+              className="mt-1 h-4 w-4 rounded border-red-300 text-red-700"
+            />
+            <span>
+              Vorlagen ebenfalls löschen
+              <span className="mt-1 block text-xs text-red-800/75 dark:text-red-100/70">
+                Ausgeschaltet bleiben Vorlagen und deren Bilder erhalten.
+              </span>
+            </span>
+          </label>
+
+          {resetMessage ? (
+            <p className="mt-4 rounded-xl bg-gray-100 px-3 py-2 text-sm text-gray-700 dark:bg-gray-800 dark:text-gray-200">
+              {resetMessage}
+            </p>
+          ) : null}
+        </section>
 
         <section className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
