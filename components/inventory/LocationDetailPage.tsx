@@ -61,6 +61,16 @@ function parseOptionalPrice(value: string) {
   return parsedValue;
 }
 
+function normalizeItemQuantity(value: unknown) {
+  const parsedValue = Number(value);
+
+  if (!Number.isFinite(parsedValue) || parsedValue < 1) {
+    return 1;
+  }
+
+  return Math.floor(parsedValue);
+}
+
 export function LocationDetailPage({
   initialData,
   locationId,
@@ -476,6 +486,9 @@ export function LocationDetailPage({
                       </InventoryIconBadge>
                       <div>
                         <div className="font-medium">{item.name}</div>
+                        <div className="mt-1 text-xs font-semibold text-green-700 dark:text-green-300">
+                          Anzahl: {normalizeItemQuantity(item.quantity)}
+                        </div>
                         {item.icon_name ? (
                           <div className="mt-1 text-xs text-gray-400 dark:text-gray-500">
                             Icon: {getMaterialIconLabel(item.icon_name)}

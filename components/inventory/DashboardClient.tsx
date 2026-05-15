@@ -89,6 +89,27 @@ function parseOptionalPrice(value: string, label = "Preis") {
   return parsedValue;
 }
 
+function parseItemQuantity(value: string) {
+  const trimmedValue = value.trim();
+  const parsedValue = trimmedValue === "" ? 1 : Number(trimmedValue);
+
+  if (!Number.isInteger(parsedValue) || parsedValue < 1) {
+    throw new Error("Anzahl muss eine ganze Zahl ab 1 sein.");
+  }
+
+  return parsedValue;
+}
+
+function normalizeItemQuantity(value: unknown) {
+  const parsedValue = Number(value);
+
+  if (!Number.isFinite(parsedValue) || parsedValue < 1) {
+    return 1;
+  }
+
+  return Math.floor(parsedValue);
+}
+
 function nextNameFromTemplate(templateName: string, existingNames: string[]) {
   const prefix = templateName.replace(/-0000$/, "");
   const nextNumber =
@@ -111,6 +132,10 @@ function isUnknownLocationValueColumn(errorMessage: string) {
 
 function isUnknownTemplateTagColumn(errorMessage: string) {
   return errorMessage.includes("tag_names") && errorMessage.toLowerCase().includes("column");
+}
+
+function isUnknownTemplateQuantityColumn(errorMessage: string) {
+  return errorMessage.includes("item_quantity") && errorMessage.toLowerCase().includes("column");
 }
 
 export function DashboardClient({ initialData }: { initialData: DashboardData }) {
@@ -148,6 +173,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
   const [editItem, setEditItem] = useState<Item | null>(null);
   const [editItemName, setEditItemName] = useState("");
   const [editItemDescription, setEditItemDescription] = useState("");
+  const [editItemQuantity, setEditItemQuantity] = useState("1");
   const [editItemValue, setEditItemValue] = useState("");
   const [editItemPurchaseDate, setEditItemPurchaseDate] = useState("");
   const [editItemStatus, setEditItemStatus] = useState<ItemStatus | "">("");
@@ -168,6 +194,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
   const [itemName, setItemName] = useState("");
   const [itemDescription, setItemDescription] = useState("");
   const [itemLocation, setItemLocation] = useState<string | null>(null);
+  const [itemQuantity, setItemQuantity] = useState("1");
   const [itemStatus, setItemStatus] = useState<ItemStatus | "">("");
   const [itemValue, setItemValue] = useState("");
   const [itemPurchaseDate, setItemPurchaseDate] = useState("");
@@ -223,6 +250,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
       setItemName("");
       setItemDescription("");
       setItemLocation(nextType === "item" ? selectedLocation : null);
+      setItemQuantity("1");
       setItemStatus("");
       setItemValue("");
       setItemPurchaseDate("");
@@ -259,10 +287,12 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
     const nextLocations = locationData ?? [];
     const nextItems = (itemData ?? []).map((item) => ({
       ...item,
+      quantity: normalizeItemQuantity(item.quantity),
       purchase_date: normalizeDateInputValue(item.purchase_date) || null,
     }));
     const nextTemplates = ((templateData ?? []) as InventoryTemplate[]).map((template) => ({
       ...template,
+      item_quantity: template.entity_type === "item" ? normalizeItemQuantity(template.item_quantity) : null,
       item_purchase_date: normalizeDateInputValue(template.item_purchase_date) || null,
     }));
     const nextTags = (tagsData ?? []) as Array<{ id: string; name: string }>;
@@ -320,6 +350,12 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
     if (response.error && isUnknownTemplateTagColumn(response.error.message)) {
       const fallbackPayload = { ...payload };
       delete fallbackPayload.tag_names;
+      return supabase.from<InventoryTemplate[]>("inventory_templates").insert(fallbackPayload);
+    }
+
+    if (response.error && isUnknownTemplateQuantityColumn(response.error.message)) {
+      const fallbackPayload = { ...payload };
+      delete fallbackPayload.item_quantity;
       return supabase.from<InventoryTemplate[]>("inventory_templates").insert(fallbackPayload);
     }
 
@@ -435,10 +471,12 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
 
       let nextItemValue: number | null = null;
       let nextLocationValue: number | null = null;
+      let nextItemQuantity = 1;
       let nextLinks: Array<{ label: string; url: string }> = [];
 
       try {
         nextItemValue = createType === "item" ? parseOptionalPrice(itemValue) : null;
+        nextItemQuantity = createType === "item" ? parseItemQuantity(itemQuantity) : 1;
         nextLocationValue = createType === "location" ? parseOptionalPrice(locValue) : null;
         nextLinks = normalizeResourceLinkDrafts(createType === "item" ? itemLinks : locLinks);
       } catch (error) {
@@ -484,6 +522,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
         icon_name: createType === "item" ? itemIcon || null : locIcon || null,
         image_path: uploadedImagePath,
         item_value: createType === "item" ? nextItemValue : null,
+        item_quantity: createType === "item" ? nextItemQuantity : null,
         item_purchase_date:
           createType === "item" ? normalizeDateInputValue(itemPurchaseDate) || null : null,
         location_value: createType === "location" ? nextLocationValue : null,
@@ -593,10 +632,12 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
       }
 
       let nextItemValue: number | null = null;
+      let nextItemQuantity = 1;
       let nextLinks: Array<{ label: string; url: string }> = [];
 
       try {
         nextItemValue = parseOptionalPrice(itemValue);
+        nextItemQuantity = parseItemQuantity(itemQuantity);
         nextLinks = normalizeResourceLinkDrafts(itemLinks);
       } catch (error) {
         window.alert(error instanceof Error ? error.message : "Preis muss eine gültige Zahl sein.");
@@ -624,6 +665,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
         item_value: nextItemValue,
         item_purchase_date: normalizeDateInputValue(itemPurchaseDate) || null,
         item_status: itemStatus || null,
+        item_quantity: nextItemQuantity,
       });
 
       if (error) {
@@ -825,6 +867,15 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
       return;
     }
 
+    let nextQuantity = 1;
+
+    try {
+      nextQuantity = parseItemQuantity(editItemQuantity);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Anzahl muss eine ganze Zahl ab 1 sein.");
+      return;
+    }
+
     let uploadedImagePath: string | null = null;
     let nextImagePath = editItemRemoveImage ? null : editItem.image_path ?? null;
 
@@ -847,6 +898,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
       item_status: editItemStatus || null,
       item_icon_name: editItemIcon || null,
       item_image_path: nextImagePath,
+      item_quantity: nextQuantity,
     });
 
     if (error) {
@@ -902,6 +954,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
     setEditItem(null);
     setEditItemName("");
     setEditItemDescription("");
+    setEditItemQuantity("1");
     setEditItemValue("");
     setEditItemPurchaseDate("");
     setEditItemStatus("");
@@ -989,6 +1042,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
     setItemName("");
     setItemDescription("");
     setItemLocation(selectedLocation);
+    setItemQuantity("1");
     setItemStatus("");
     setItemValue("");
     setItemPurchaseDate("");
@@ -1027,6 +1081,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
     setEditItem(item);
     setEditItemName(item.name);
     setEditItemDescription(item.description ?? "");
+    setEditItemQuantity(normalizeItemQuantity(item.quantity).toString());
     setEditItemValue(item.value?.toString() ?? "");
     setEditItemPurchaseDate(normalizeDateInputValue(item.purchase_date));
     setEditItemStatus(item.status ?? "");
@@ -1088,6 +1143,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
     setEditItem(null);
     setEditItemName("");
     setEditItemDescription("");
+    setEditItemQuantity("1");
     setEditItemValue("");
     setEditItemPurchaseDate("");
     setEditItemStatus("");
@@ -1119,6 +1175,9 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
     (item) => item.location_id != null && nestedFocusLocationIds.includes(item.location_id)
   );
   const visibleItems = focusScope === "nested" ? nestedFocusItems : directFocusItems;
+  const totalItemQuantity = items.reduce((sum, item) => sum + normalizeItemQuantity(item.quantity), 0);
+  const directFocusQuantity = directFocusItems.reduce((sum, item) => sum + normalizeItemQuantity(item.quantity), 0);
+  const nestedFocusQuantity = nestedFocusItems.reduce((sum, item) => sum + normalizeItemQuantity(item.quantity), 0);
   const selectedLocationName = getLocationName(selectedLocation);
   const matchingTemplates = templates.filter((template) => template.entity_type === createType);
   const selectedTemplate = matchingTemplates.find((template) => template.id === selectedTemplateId) ?? null;
@@ -1132,6 +1191,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
       if (createType === "item") {
         setItemName(nextNameFromTemplate(selectedTemplate.name, items.map((item) => item.name)));
         setItemDescription(selectedTemplate.description ?? "");
+        setItemQuantity(normalizeItemQuantity(selectedTemplate.item_quantity).toString());
         setItemStatus(selectedTemplate.item_status ?? "");
         setItemValue(selectedTemplate.item_value?.toString() ?? "");
         setItemPurchaseDate(normalizeDateInputValue(selectedTemplate.item_purchase_date));
@@ -1179,7 +1239,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                   href="/items"
                   label="Items"
                   value={String(items.length)}
-                  description="Durchsuchen"
+                  description={`${totalItemQuantity} Stück`}
                 />
               </div>
             </div>
@@ -1279,10 +1339,10 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                 <div className="flex flex-wrap items-center gap-2">
                   <div className="rounded-full bg-gray-100 px-3 py-1 text-sm text-gray-500 dark:bg-gray-800 dark:text-gray-300">
                     <span className="font-medium text-gray-700 dark:text-gray-100">{directFocusItems.length}</span>{" "}
-                    Items direkt
+                    Items direkt / {directFocusQuantity} Stück
                   </div>
                   <div className="rounded-full bg-green-50 px-3 py-1 text-sm text-green-700 dark:bg-green-950/40 dark:text-green-300">
-                    <span className="font-medium">{nestedFocusItems.length}</span> Items verschachtelt
+                    <span className="font-medium">{nestedFocusItems.length}</span> Items verschachtelt / {nestedFocusQuantity} Stück
                   </div>
                   <button
                     type="button"
@@ -1404,6 +1464,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                 const nextType = event.target.value as "item" | "location";
                 setCreateType(nextType);
                 setSelectedTemplateId("");
+                setItemQuantity("1");
                 setItemValue("");
                 setItemPurchaseDate("");
                 setItemLinks([]);
@@ -1509,6 +1570,11 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                         Status: {getItemStatusLabel(selectedTemplate.item_status)}
                       </p>
                     ) : null}
+                    {createType === "item" ? (
+                      <p className="mt-2 text-xs text-gray-400">
+                        Anzahl: {normalizeItemQuantity(selectedTemplate.item_quantity)}
+                      </p>
+                    ) : null}
                     {createType === "item" && selectedTemplate.item_value != null ? (
                       <p className="mt-2 text-xs text-gray-400">
                         Preis: {selectedTemplate.item_value} EUR
@@ -1564,6 +1630,14 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                       value={itemDescription}
                       onChange={(event) => setItemDescription(event.target.value)}
                       className="min-h-24 w-full rounded-md border bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-700"
+                    />
+                    <Input
+                      type="number"
+                      min="1"
+                      step="1"
+                      placeholder="Anzahl"
+                      value={itemQuantity}
+                      onChange={(event) => setItemQuantity(event.target.value)}
                     />
                     <Select
                       value={itemStatus}
@@ -1680,6 +1754,14 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
                   value={itemDescription}
                   onChange={(event) => setItemDescription(event.target.value)}
                   className="min-h-24 w-full rounded-md border bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-700"
+                />
+                <Input
+                  type="number"
+                  min="1"
+                  step="1"
+                  placeholder="Anzahl"
+                  value={itemQuantity}
+                  onChange={(event) => setItemQuantity(event.target.value)}
                 />
                 <Select
                   value={itemStatus}
@@ -2058,6 +2140,18 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
             />
             <div className="space-y-1">
               <label className="text-sm font-medium text-gray-600 dark:text-gray-300">
+                Anzahl
+              </label>
+              <Input
+                type="number"
+                min="1"
+                step="1"
+                value={editItemQuantity}
+                onChange={(event) => setEditItemQuantity(event.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium text-gray-600 dark:text-gray-300">
                 Preis in EUR
               </label>
               <Input
@@ -2353,6 +2447,9 @@ function ItemCard({ item, locationLabel, onEdit, onMove, onDelete }: ItemCardPro
           <p className="mt-1 text-xs font-medium text-gray-400 dark:text-gray-500">
             {getItemStatusLabel(item.status)}
           </p>
+          <span className="mt-2 inline-flex rounded-full bg-green-50 px-2.5 py-1 text-xs font-semibold text-green-700 dark:bg-green-950/40 dark:text-green-300">
+            Anzahl: {normalizeItemQuantity(item.quantity)}
+          </span>
           {item.icon_name ? (
             <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
               Icon: {getMaterialIconLabel(item.icon_name)}

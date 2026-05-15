@@ -14,6 +14,16 @@ import { getItemStatusLabel } from "@/lib/inventory";
 import type { TagDetailData } from "@/lib/inventory-data";
 import { supabase } from "@/lib/supabase";
 
+function normalizeItemQuantity(value: unknown) {
+  const parsedValue = Number(value);
+
+  if (!Number.isFinite(parsedValue) || parsedValue < 1) {
+    return 1;
+  }
+
+  return Math.floor(parsedValue);
+}
+
 export function TagDetailPage({ initialData }: { initialData: TagDetailData }) {
   const router = useRouter();
   const [editOpen, setEditOpen] = useState(false);
@@ -160,6 +170,9 @@ export function TagDetailPage({ initialData }: { initialData: TagDetailData }) {
                       <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                         {getItemStatusLabel(item.status)}
                       </p>
+                      <span className="mt-2 inline-flex rounded-full bg-green-50 px-2.5 py-1 text-xs font-semibold text-green-700 dark:bg-green-950/40 dark:text-green-300">
+                        Anzahl: {normalizeItemQuantity(item.quantity)}
+                      </span>
                       {item.description ? (
                         <p className="mt-2 line-clamp-2 whitespace-pre-line text-sm text-gray-600 dark:text-gray-300">
                           {item.description}

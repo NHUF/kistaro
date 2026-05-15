@@ -151,6 +151,11 @@ export default async function SearchPage({
                               ? getLocationTypeLabel(result.location_type)
                               : result.subtitle ?? "-"}
                         </p>
+                        {result.result_type === "item" ? (
+                          <span className="mt-2 inline-flex rounded-full bg-green-50 px-2.5 py-1 text-xs font-semibold text-green-700 dark:bg-green-950/40 dark:text-green-300">
+                            Anzahl: {result.item_quantity ?? 1}
+                          </span>
+                        ) : null}
                         {result.meta ? (
                           <p className="mt-2 line-clamp-2 whitespace-pre-line text-sm text-gray-600 dark:text-gray-300">
                             {result.meta}

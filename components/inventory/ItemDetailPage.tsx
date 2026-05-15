@@ -58,6 +58,26 @@ function formatPrice(value?: number | null) {
   }).format(value);
 }
 
+function normalizeItemQuantity(value: unknown) {
+  const parsedValue = Number(value);
+
+  if (!Number.isFinite(parsedValue) || parsedValue < 1) {
+    return 1;
+  }
+
+  return Math.floor(parsedValue);
+}
+
+function parseItemQuantity(value: string) {
+  const parsedValue = Number(value.trim() || "1");
+
+  if (!Number.isInteger(parsedValue) || parsedValue < 1) {
+    throw new Error("Anzahl muss eine ganze Zahl ab 1 sein.");
+  }
+
+  return parsedValue;
+}
+
 export function ItemDetailPage({
   initialData,
   itemId,
@@ -80,6 +100,7 @@ export function ItemDetailPage({
   const [editName, setEditName] = useState(initialData.item?.name ?? "");
   const [editLocation, setEditLocation] = useState<string | null>(initialData.item?.location_id ?? null);
   const [editDescription, setEditDescription] = useState(initialData.item?.description ?? "");
+  const [editQuantity, setEditQuantity] = useState(normalizeItemQuantity(initialData.item?.quantity).toString());
   const [editPrice, setEditPrice] = useState(initialData.item?.value?.toString() ?? "");
   const [editPurchaseDate, setEditPurchaseDate] = useState(
     normalizeDateInputValue(initialData.item?.purchase_date),
@@ -91,6 +112,8 @@ export function ItemDetailPage({
   const [editLinks, setEditLinks] = useState<ResourceLinkDraft[]>(toResourceLinkDrafts(initialData.links));
 
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [quantityDraft, setQuantityDraft] = useState(normalizeItemQuantity(initialData.item?.quantity).toString());
+  const [quantitySaving, setQuantitySaving] = useState(false);
 
   async function reloadItemData() {
     setLoading(true);
@@ -111,6 +134,8 @@ export function ItemDetailPage({
         setEditName(data.item.name);
         setEditLocation(data.item.location_id);
         setEditDescription(data.item.description ?? "");
+        setEditQuantity(normalizeItemQuantity(data.item.quantity).toString());
+        setQuantityDraft(normalizeItemQuantity(data.item.quantity).toString());
         setEditPrice(data.item.value?.toString() ?? "");
         setEditPurchaseDate(normalizeDateInputValue(data.item.purchase_date));
         setEditStatus(data.item.status ?? "");
@@ -156,6 +181,15 @@ export function ItemDetailPage({
       return;
     }
 
+    let normalizedQuantity = 1;
+
+    try {
+      normalizedQuantity = parseItemQuantity(editQuantity);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Anzahl muss eine ganze Zahl ab 1 sein.");
+      return;
+    }
+
     let normalizedLinks: Array<{ label: string; url: string }> = [];
 
     try {
@@ -187,6 +221,7 @@ export function ItemDetailPage({
       item_status: editStatus || null,
       item_icon_name: editIconName || null,
       item_image_path: nextImagePath,
+      item_quantity: normalizedQuantity,
     });
 
     if (error) {
@@ -275,6 +310,59 @@ export function ItemDetailPage({
     await reloadItemData();
   }
 
+  async function saveQuantity(nextQuantity?: number) {
+    if (!item || quantitySaving) {
+      return;
+    }
+
+    let normalizedQuantity = nextQuantity ?? 1;
+
+    try {
+      normalizedQuantity = nextQuantity ?? parseItemQuantity(quantityDraft);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Anzahl muss eine ganze Zahl ab 1 sein.");
+      setQuantityDraft(normalizeItemQuantity(item.quantity).toString());
+      return;
+    }
+
+    setQuantitySaving(true);
+
+    const { error } = await supabase.rpc("update_item_details", {
+      item_id: item.id,
+      item_name: item.name,
+      item_description: item.description ?? null,
+      item_value: item.value ?? null,
+      item_purchase_date: normalizeDateInputValue(item.purchase_date) || null,
+      item_status: item.status || null,
+      item_icon_name: item.icon_name || null,
+      item_image_path: item.image_path || null,
+      item_quantity: normalizedQuantity,
+    });
+
+    if (error) {
+      window.alert(error.message);
+      setQuantitySaving(false);
+      return;
+    }
+
+    setItem({ ...item, quantity: normalizedQuantity });
+    setEditQuantity(normalizedQuantity.toString());
+    setQuantityDraft(normalizedQuantity.toString());
+    setQuantitySaving(false);
+
+    await logInventoryActivity({
+      action: "update",
+      entityId: item.id,
+      entityType: "item",
+      title: `Anzahl geändert: ${item.name}`,
+      description: `Anzahl wurde auf ${normalizedQuantity} gesetzt.`,
+      metadata: {
+        item_id: item.id,
+        quantity: normalizedQuantity,
+      },
+    });
+  }
+
   async function deleteItem() {
     if (!item) {
       return;
@@ -348,6 +436,9 @@ export function ItemDetailPage({
                 <span className="rounded-full bg-gray-100 px-3 py-1 text-sm text-gray-600 dark:bg-gray-800 dark:text-gray-300">
                   {locationName}
                 </span>
+                <span className="rounded-full bg-green-50 px-3 py-1 text-sm font-semibold text-green-700 dark:bg-green-950/40 dark:text-green-300">
+                  Anzahl: {normalizeItemQuantity(item.quantity)}
+                </span>
               </div>
               {item.icon_name ? (
                 <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">
@@ -404,9 +495,56 @@ export function ItemDetailPage({
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">
                 Schnellinfo
               </p>
+              <div className="mt-4 rounded-2xl border border-green-100 bg-green-50 p-4 dark:border-green-900/60 dark:bg-green-950/30">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-green-700 dark:text-green-300">
+                      Anzahl
+                    </p>
+                    <p className="mt-1 text-sm text-green-800 dark:text-green-200">
+                      Direkt anpassbar, ohne den Bearbeiten-Dialog zu öffnen.
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-white px-3 py-1 text-sm font-semibold text-green-700 shadow-sm dark:bg-gray-900 dark:text-green-300">
+                    {normalizeItemQuantity(item.quantity)}x
+                  </span>
+                </div>
+                <div className="mt-3 flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    onClick={() => void saveQuantity(Math.max(1, normalizeItemQuantity(item.quantity) - 1))}
+                    disabled={quantitySaving || normalizeItemQuantity(item.quantity) <= 1}
+                  >
+                    -
+                  </Button>
+                  <Input
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={quantityDraft}
+                    onChange={(event) => setQuantityDraft(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        void saveQuantity();
+                      }
+                    }}
+                  />
+                  <Button
+                    variant="ghost"
+                    onClick={() => void saveQuantity(normalizeItemQuantity(item.quantity) + 1)}
+                    disabled={quantitySaving}
+                  >
+                    +
+                  </Button>
+                  <Button variant="primary" onClick={() => void saveQuantity()} disabled={quantitySaving}>
+                    {quantitySaving ? "Speichert..." : "Übernehmen"}
+                  </Button>
+                </div>
+              </div>
               <div className="mt-4 grid gap-3">
                 <DetailField label="Location" value={locationName} />
                 <DetailField label="Status" value={getItemStatusLabel(item.status)} />
+                <DetailField label="Anzahl" value={`${normalizeItemQuantity(item.quantity)}x`} />
                 <DetailField label="Preis" value={formatPrice(item.value)} />
                 <DetailField label="Kaufdatum" value={formatInventoryDate(item.purchase_date)} />
                 <DetailField label="Erstellt" value={formatDate(item.created_at)} />
@@ -500,6 +638,14 @@ export function ItemDetailPage({
               onChange={(event) => setEditDescription(event.target.value)}
               placeholder="Beschreibung"
               className="min-h-28 w-full rounded-md border bg-white px-3 py-2 dark:border-gray-600 dark:bg-gray-700"
+            />
+            <Input
+              type="number"
+              min="1"
+              step="1"
+              placeholder="Anzahl"
+              value={editQuantity}
+              onChange={(event) => setEditQuantity(event.target.value)}
             />
             <Input
               type="number"

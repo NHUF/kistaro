@@ -18,6 +18,7 @@ export type DashboardItem = {
   name: string;
   location_id: string | null;
   description?: string | null;
+  quantity?: number | null;
   value?: number | null;
   purchase_date?: string | null;
   status?: ItemStatus | null;
@@ -37,6 +38,7 @@ export type InventoryTemplate = {
   image_path?: string | null;
   item_value?: number | null;
   item_purchase_date?: string | null;
+  item_quantity?: number | null;
   location_value?: number | null;
   links?: Array<{ label: string; url: string }> | null;
   tag_names?: string[] | null;

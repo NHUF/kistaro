@@ -49,6 +49,7 @@ type TemplateFormState = {
   removeImage: boolean;
   itemValue: string;
   itemPurchaseDate: string;
+  itemQuantity: string;
   locationValue: string;
   links: ResourceLinkDraft[];
   tagNames: string[];
@@ -65,6 +66,7 @@ const EMPTY_FORM: TemplateFormState = {
   removeImage: false,
   itemValue: "",
   itemPurchaseDate: "",
+  itemQuantity: "1",
   locationValue: "",
   links: [],
   tagNames: [],
@@ -98,12 +100,37 @@ function parseOptionalPrice(value: string) {
   return parsedValue;
 }
 
+function parseItemQuantity(value: string) {
+  const trimmedValue = value.trim();
+  const parsedValue = trimmedValue === "" ? 1 : Number(trimmedValue);
+
+  if (!Number.isInteger(parsedValue) || parsedValue < 1) {
+    throw new Error("Anzahl muss eine ganze Zahl ab 1 sein.");
+  }
+
+  return parsedValue;
+}
+
+function normalizeItemQuantity(value: unknown) {
+  const parsedValue = Number(value);
+
+  if (!Number.isFinite(parsedValue) || parsedValue < 1) {
+    return 1;
+  }
+
+  return Math.floor(parsedValue);
+}
+
 function isUnknownLocationValueColumn(errorMessage: string) {
   return errorMessage.includes("location_value") && errorMessage.toLowerCase().includes("column");
 }
 
 function isUnknownTemplateTagColumn(errorMessage: string) {
   return errorMessage.includes("tag_names") && errorMessage.toLowerCase().includes("column");
+}
+
+function isUnknownTemplateQuantityColumn(errorMessage: string) {
+  return errorMessage.includes("item_quantity") && errorMessage.toLowerCase().includes("column");
 }
 
 function parseJsonArray(value: string) {
@@ -159,6 +186,7 @@ function normalizeTemplateForClient(template: InventoryTemplateRecord): Inventor
     ...template,
     links: normalizeTemplateLinks(template.links),
     tag_names: normalizeTemplateTagNames(template.tag_names),
+    item_quantity: template.entity_type === "item" ? normalizeItemQuantity(template.item_quantity) : null,
   };
 }
 
@@ -229,6 +257,12 @@ export function TemplatesIndexPage({
       return supabase.from<InventoryTemplateRecord[]>("inventory_templates").insert(fallbackPayload);
     }
 
+    if (response.error && isUnknownTemplateQuantityColumn(response.error.message)) {
+      const fallbackPayload = { ...payload };
+      delete fallbackPayload.item_quantity;
+      return supabase.from<InventoryTemplateRecord[]>("inventory_templates").insert(fallbackPayload);
+    }
+
     return response;
   }
 
@@ -250,6 +284,15 @@ export function TemplatesIndexPage({
     if (response.error && isUnknownTemplateTagColumn(response.error.message)) {
       const fallbackPayload = { ...payload };
       delete fallbackPayload.tag_names;
+      return supabase
+        .from<InventoryTemplateRecord[]>("inventory_templates")
+        .update(fallbackPayload)
+        .eq("id", templateId);
+    }
+
+    if (response.error && isUnknownTemplateQuantityColumn(response.error.message)) {
+      const fallbackPayload = { ...payload };
+      delete fallbackPayload.item_quantity;
       return supabase
         .from<InventoryTemplateRecord[]>("inventory_templates")
         .update(fallbackPayload)
@@ -286,6 +329,7 @@ export function TemplatesIndexPage({
       removeImage: false,
       itemValue: safeTemplate.item_value?.toString() ?? "",
       itemPurchaseDate: normalizeDateInputValue(safeTemplate.item_purchase_date),
+      itemQuantity: normalizeItemQuantity(safeTemplate.item_quantity).toString(),
       locationValue: safeTemplate.location_value?.toString() ?? "",
       links: normalizeTemplateLinks(safeTemplate.links),
       tagNames: normalizeTemplateTagNames(safeTemplate.tag_names),
@@ -312,10 +356,12 @@ export function TemplatesIndexPage({
 
       let nextItemValue: number | null = null;
       let nextLocationValue: number | null = null;
+      let nextItemQuantity = 1;
       let nextLinks: Array<{ label: string; url: string }> = [];
 
       try {
         nextItemValue = form.entityType === "item" ? parseOptionalPrice(form.itemValue) : null;
+        nextItemQuantity = form.entityType === "item" ? parseItemQuantity(form.itemQuantity) : 1;
         nextLocationValue = form.entityType === "location" ? parseOptionalPrice(form.locationValue) : null;
         nextLinks = normalizeResourceLinkDrafts(form.links);
       } catch (error) {
@@ -349,6 +395,7 @@ export function TemplatesIndexPage({
         icon_name: form.iconName || null,
         image_path: uploadedImagePath,
         item_value: form.entityType === "item" ? nextItemValue : null,
+        item_quantity: form.entityType === "item" ? nextItemQuantity : null,
         item_purchase_date:
           form.entityType === "item" ? normalizeDateInputValue(form.itemPurchaseDate) || null : null,
         location_value: form.entityType === "location" ? nextLocationValue : null,
@@ -403,10 +450,12 @@ export function TemplatesIndexPage({
 
       let nextItemValue: number | null = null;
       let nextLocationValue: number | null = null;
+      let nextItemQuantity = 1;
       let nextLinks: Array<{ label: string; url: string }> = [];
 
       try {
         nextItemValue = form.entityType === "item" ? parseOptionalPrice(form.itemValue) : null;
+        nextItemQuantity = form.entityType === "item" ? parseItemQuantity(form.itemQuantity) : 1;
         nextLocationValue = form.entityType === "location" ? parseOptionalPrice(form.locationValue) : null;
         nextLinks = normalizeResourceLinkDrafts(form.links);
       } catch (error) {
@@ -439,6 +488,7 @@ export function TemplatesIndexPage({
         icon_name: form.iconName || null,
         image_path: nextImagePath,
         item_value: form.entityType === "item" ? nextItemValue : null,
+        item_quantity: form.entityType === "item" ? nextItemQuantity : null,
         item_purchase_date:
           form.entityType === "item" ? normalizeDateInputValue(form.itemPurchaseDate) || null : null,
         location_value: form.entityType === "location" ? nextLocationValue : null,
@@ -608,8 +658,11 @@ export function TemplatesIndexPage({
                 {template.description?.trim() || "Keine Beschreibung"}
               </p>
 
-              {template.entity_type === "item" && (template.item_value != null || template.item_purchase_date) ? (
+              {template.entity_type === "item" ? (
                 <div className="mt-4 flex flex-wrap gap-2 text-xs text-gray-400">
+                  <span className="rounded-full bg-gray-100 px-3 py-2 dark:bg-gray-800">
+                    Anzahl: {normalizeItemQuantity(template.item_quantity)}
+                  </span>
                   {template.item_value != null ? (
                     <span className="rounded-full bg-gray-100 px-3 py-2 dark:bg-gray-800">
                       Preis: {template.item_value} EUR
@@ -741,6 +794,7 @@ function TemplateModal({
                 itemStatus: "",
                 itemValue: "",
                 itemPurchaseDate: "",
+                itemQuantity: "1",
                 locationValue: "",
                 links: [],
                 tagNames: [],
@@ -776,6 +830,14 @@ function TemplateModal({
                 </option>
               ))}
             </Select>
+            <Input
+              type="number"
+              min="1"
+              step="1"
+              placeholder="Anzahl"
+              value={form.itemQuantity}
+              onChange={(event) => onChange({ itemQuantity: event.target.value })}
+            />
             <Input
               type="number"
               step="0.01"

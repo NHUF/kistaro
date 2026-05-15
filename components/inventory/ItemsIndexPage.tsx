@@ -13,6 +13,16 @@ import { Input } from "@/components/ui/Input";
 import { getItemStatusLabel } from "@/lib/inventory";
 import type { ItemRecord, LocationRecord } from "@/lib/inventory-data";
 
+function normalizeItemQuantity(value: unknown) {
+  const parsedValue = Number(value);
+
+  if (!Number.isFinite(parsedValue) || parsedValue < 1) {
+    return 1;
+  }
+
+  return Math.floor(parsedValue);
+}
+
 export function ItemsIndexPage({
   initialItems,
   locations,
@@ -98,6 +108,9 @@ export function ItemsIndexPage({
                     </p>
                     <h2 className="mt-2 text-lg font-semibold">{item.name}</h2>
                     <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">{locationName}</p>
+                    <span className="mt-2 inline-flex rounded-full bg-green-50 px-2.5 py-1 text-xs font-semibold text-green-700 dark:bg-green-950/40 dark:text-green-300">
+                      Anzahl: {normalizeItemQuantity(item.quantity)}
+                    </span>
                     {item.icon_name ? (
                       <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
                         Icon: {getMaterialIconLabel(item.icon_name)}

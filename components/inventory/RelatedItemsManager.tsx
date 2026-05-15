@@ -9,6 +9,16 @@ import { logInventoryActivity } from "@/lib/inventory-activity";
 import { supabase } from "@/lib/supabase";
 import type { ItemRecord, LinkedItemRecord } from "@/lib/inventory-data";
 
+function normalizeItemQuantity(value: unknown) {
+  const parsedValue = Number(value);
+
+  if (!Number.isFinite(parsedValue) || parsedValue < 1) {
+    return 1;
+  }
+
+  return Math.floor(parsedValue);
+}
+
 export function RelatedItemsManager({
   currentItem,
   linkedItems,
@@ -165,6 +175,9 @@ export function RelatedItemsManager({
                   <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                     {getLocationName(entry.location_id)}
                   </p>
+                  <span className="mt-2 inline-flex rounded-full bg-green-50 px-2.5 py-1 text-xs font-semibold text-green-700 dark:bg-green-950/40 dark:text-green-300">
+                    Anzahl: {normalizeItemQuantity(entry.quantity)}
+                  </span>
                 </div>
               </Link>
               <Button variant="danger" onClick={() => void detachLink(entry.id)} disabled={busy}>

@@ -23,6 +23,7 @@ export type LocationRecord = {
 export type ItemListRecord = {
   id: string;
   name: string;
+  quantity?: number | null;
   icon_name?: string | null;
   status?: ItemStatus | null;
   image_path?: string | null;
@@ -33,6 +34,7 @@ export type ItemRecord = {
   name: string;
   location_id: string | null;
   description?: string | null;
+  quantity?: number | null;
   value?: number | null;
   purchase_date?: string | null;
   status?: ItemStatus | null;
@@ -54,6 +56,7 @@ export type LinkedItemRecord = {
   id: string;
   name: string;
   location_id: string | null;
+  quantity?: number | null;
   status?: ItemStatus | null;
   icon_name?: string | null;
   image_path?: string | null;
@@ -106,6 +109,7 @@ export type SearchResultRecord = {
   href: string;
   image_path?: string | null;
   icon_name?: string | null;
+  item_quantity?: number | null;
   item_status?: ItemStatus | null;
   location_type?: LocationType | null;
 };
@@ -128,6 +132,7 @@ export type InventoryTemplateRecord = {
   image_path?: string | null;
   item_value?: number | null;
   item_purchase_date?: string | null;
+  item_quantity?: number | null;
   location_value?: number | null;
   links?: Array<{ label: string; url: string }> | null;
   tag_names?: string[] | null;
@@ -160,9 +165,20 @@ export type TagAssignmentData = {
   assignedItemIds: string[];
 };
 
+function normalizeQuantity(value: unknown) {
+  const parsedValue = Number(value);
+
+  if (!Number.isFinite(parsedValue) || parsedValue < 1) {
+    return 1;
+  }
+
+  return Math.floor(parsedValue);
+}
+
 function normalizeItemRecord<T extends ItemRecord>(item: T): T {
   return {
     ...item,
+    quantity: normalizeQuantity(item.quantity),
     purchase_date: normalizeNullableDateValue(item.purchase_date),
   };
 }
@@ -171,6 +187,7 @@ function normalizeTemplateRecord<T extends InventoryTemplateRecord>(template: T)
   return {
     ...template,
     item_purchase_date: normalizeNullableDateValue(template.item_purchase_date),
+    item_quantity: template.entity_type === "item" ? normalizeQuantity(template.item_quantity) : null,
     tag_names: Array.isArray(template.tag_names)
       ? template.tag_names.filter((tagName): tagName is string => typeof tagName === "string" && tagName.trim() !== "")
       : [],
@@ -192,7 +209,7 @@ export async function fetchLocationDetailData(locationId: string): Promise<Locat
     supabase.from<LocationRecord[]>("locations").select("*").eq("parent_id", locationId).order("name"),
     supabase
       .from<ItemListRecord[]>("items")
-      .select("id, name, icon_name, status, image_path")
+      .select("id, name, quantity, icon_name, status, image_path")
       .eq("location_id", locationId)
       .order("name"),
     supabase.from<Array<{ tag_id: string }>>("location_tags").select("tag_id").eq("location_id", locationId),
@@ -216,7 +233,10 @@ export async function fetchLocationDetailData(locationId: string): Promise<Locat
     location: (locationResponse.data as LocationRecord | null) ?? null,
     allLocations: (allLocationsResponse.data ?? []) as LocationRecord[],
     childLocations: (childLocationsResponse.data ?? []) as LocationRecord[],
-    items: (itemsResponse.data ?? []) as ItemListRecord[],
+    items: ((itemsResponse.data ?? []) as ItemListRecord[]).map((item) => ({
+      ...item,
+      quantity: normalizeQuantity(item.quantity),
+    })),
     assignedTags: availableTags.filter((tag) => tagIds.includes(tag.id)),
     availableTags,
     links: (linksResponse.data ?? []) as ResourceLinkRecord[],
@@ -240,7 +260,7 @@ export async function fetchItemDetailData(itemId: string): Promise<ItemDetailDat
     supabase.from<Tag[]>("tags").select("id, name").order("name"),
     supabase.from<ItemDocumentRecord[]>("item_documents").select("*").eq("item_id", itemId).order("created_at", { ascending: false }),
     supabase.from<Array<{ linked_item_id: string }>>("item_links").select("linked_item_id").eq("item_id", itemId),
-    supabase.from<ItemRecord[]>("items").select("id, name, location_id, status, icon_name, image_path").order("name"),
+    supabase.from<ItemRecord[]>("items").select("id, name, location_id, quantity, status, icon_name, image_path").order("name"),
     supabase
       .from<ResourceLinkRecord[]>("inventory_resource_links")
       .select("*")
@@ -458,6 +478,7 @@ export async function fetchSearchResults(query: string): Promise<SearchResultRec
             href: `/items/${item.id}`,
             image_path: item.image_path ?? null,
             icon_name: item.icon_name ?? null,
+            item_quantity: normalizeQuantity(item.quantity),
             item_status: item.status ?? null,
             score,
           } satisfies SearchResultRecord & { score: number })

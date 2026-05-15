@@ -13,6 +13,16 @@ import { logInventoryActivity } from "@/lib/inventory-activity";
 import type { ItemRecord, LocationRecord, TagAssignmentData } from "@/lib/inventory-data";
 import { supabase } from "@/lib/supabase";
 
+function normalizeItemQuantity(value: unknown) {
+  const parsedValue = Number(value);
+
+  if (!Number.isFinite(parsedValue) || parsedValue < 1) {
+    return 1;
+  }
+
+  return Math.floor(parsedValue);
+}
+
 type LocationOption = {
   id: string;
   label: string;
@@ -355,6 +365,9 @@ export function TagAssignPage({
                         <p className="font-semibold text-gray-900 dark:text-gray-50">{item.name}</p>
                         <span className="rounded-full bg-gray-100 px-2 py-1 text-xs text-gray-500 dark:bg-gray-800 dark:text-gray-300">
                           {getItemStatusLabel(item.status)}
+                        </span>
+                        <span className="rounded-full bg-green-50 px-2 py-1 text-xs font-semibold text-green-700 dark:bg-green-950/40 dark:text-green-300">
+                          Anzahl: {normalizeItemQuantity(item.quantity)}
                         </span>
                       </div>
                       <p className="mt-1 truncate text-sm text-gray-500 dark:text-gray-400">
