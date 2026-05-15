@@ -36,6 +36,7 @@ import { formatInventoryDate, normalizeDateInputValue } from "@/lib/inventory-da
 import { removeInventoryImage, uploadInventoryImage } from "@/lib/inventory-media";
 import { logInventoryActivity } from "@/lib/inventory-activity";
 import { supabase } from "@/lib/supabase";
+import { ensureInventoryTagsExist, mergeTagNames } from "@/lib/inventory-tags-client";
 
 type TemplateFormState = {
   entityType: "item" | "location";
@@ -172,6 +173,7 @@ export function TemplatesIndexPage({
 }) {
   const router = useRouter();
   const [templates, setTemplates] = useState(initialTemplates.map(normalizeTemplateForClient));
+  const [knownTags, setKnownTags] = useState(availableTags);
   const [query, setQuery] = useState(initialQuery);
   const [createOpen, setCreateOpen] = useState(false);
   const [editTemplate, setEditTemplate] = useState<InventoryTemplateRecord | null>(null);
@@ -324,6 +326,20 @@ export function TemplatesIndexPage({
         return;
       }
 
+      let savedTagNames: string[] = [];
+
+      try {
+        savedTagNames = await ensureInventoryTagsExist(form.tagNames);
+      } catch (error) {
+        if (uploadedImagePath) {
+          await removeInventoryImage(uploadedImagePath);
+        }
+        window.alert(error instanceof Error ? error.message : "Tags konnten nicht gespeichert werden.");
+        return;
+      }
+
+      setKnownTags((currentTags) => mergeTagNames(currentTags, savedTagNames));
+
       const { error } = await insertTemplate({
         entity_type: form.entityType,
         name: getTemplateName(form.baseName),
@@ -337,7 +353,7 @@ export function TemplatesIndexPage({
           form.entityType === "item" ? normalizeDateInputValue(form.itemPurchaseDate) || null : null,
         location_value: form.entityType === "location" ? nextLocationValue : null,
         links: nextLinks,
-        tag_names: form.tagNames,
+        tag_names: savedTagNames,
       });
 
       if (error) {
@@ -401,6 +417,20 @@ export function TemplatesIndexPage({
         return;
       }
 
+      let savedTagNames: string[] = [];
+
+      try {
+        savedTagNames = await ensureInventoryTagsExist(form.tagNames);
+      } catch (error) {
+        if (uploadedImagePath) {
+          await removeInventoryImage(uploadedImagePath);
+        }
+        window.alert(error instanceof Error ? error.message : "Tags konnten nicht gespeichert werden.");
+        return;
+      }
+
+      setKnownTags((currentTags) => mergeTagNames(currentTags, savedTagNames));
+
       const { error } = await updateTemplateRow(editTemplate.id, {
         name: getTemplateName(form.baseName),
         description: form.description.trim() || null,
@@ -413,7 +443,7 @@ export function TemplatesIndexPage({
           form.entityType === "item" ? normalizeDateInputValue(form.itemPurchaseDate) || null : null,
         location_value: form.entityType === "location" ? nextLocationValue : null,
         links: nextLinks,
-        tag_names: form.tagNames,
+        tag_names: savedTagNames,
       });
 
       if (error) {
@@ -617,7 +647,7 @@ export function TemplatesIndexPage({
 
       {createOpen ? (
         <TemplateModal
-          availableTags={availableTags}
+          availableTags={knownTags}
           busy={busy}
           form={form}
           onCancel={() => {
@@ -632,7 +662,7 @@ export function TemplatesIndexPage({
 
       {editTemplate ? (
         <TemplateModal
-          availableTags={availableTags}
+          availableTags={knownTags}
           busy={busy}
           currentImagePath={editTemplate.image_path}
           form={form}

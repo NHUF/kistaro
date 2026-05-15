@@ -46,6 +46,7 @@ import {
   type ItemStatus,
   type LocationType,
 } from "@/lib/inventory";
+import { ensureInventoryTagsExist, mergeTagNames } from "@/lib/inventory-tags-client";
 
 type MenuProps = {
   children: ReactNode;
@@ -460,6 +461,20 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
         return;
       }
 
+      let savedTagNames: string[] = [];
+
+      try {
+        savedTagNames = await ensureInventoryTagsExist(createType === "item" ? itemTagNames : locTagNames);
+      } catch (error) {
+        if (uploadedImagePath) {
+          await removeInventoryImage(uploadedImagePath);
+        }
+        window.alert(error instanceof Error ? error.message : "Tags konnten nicht gespeichert werden.");
+        return;
+      }
+
+      setAvailableTags((currentTags) => mergeTagNames(currentTags, savedTagNames));
+
       const { error } = await insertTemplate({
         entity_type: createType,
         name: getTemplateName(baseName),
@@ -473,7 +488,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
           createType === "item" ? normalizeDateInputValue(itemPurchaseDate) || null : null,
         location_value: createType === "location" ? nextLocationValue : null,
         links: nextLinks,
-        tag_names: createType === "item" ? itemTagNames : locTagNames,
+        tag_names: savedTagNames,
       });
 
       if (error) {
