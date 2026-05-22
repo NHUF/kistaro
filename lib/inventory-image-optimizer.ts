@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import heicConvert from "heic-convert";
+import libheif from "libheif-js";
 import sharp from "sharp";
 import { INVENTORY_MEDIA_BUCKET } from "@/lib/inventory-media";
 import {
@@ -36,6 +37,11 @@ const AUTOMATICALLY_OPTIMIZABLE_FORMATS = new Set([
 const HEIC_BRANDS = ["heic", "heix", "hevc", "hevx"];
 
 type HeicConvertResult = ArrayBuffer | Buffer | Uint8Array;
+type RawHeifImage = {
+  data: Buffer;
+  height: number;
+  width: number;
+};
 
 function formatImageError(error: unknown) {
   const message = error instanceof Error ? error.message : "Bilddatei konnte nicht gelesen werden.";
@@ -67,20 +73,91 @@ function isLikelyHeicFile(buffer: Buffer) {
 
 async function convertHeifToJpegBuffer(absolutePath: string) {
   const sourceBuffer = readFileSync(absolutePath);
-  const convertedBuffer = (await heicConvert({
-    buffer: sourceBuffer,
-    format: "JPEG",
-    quality: 0.92,
-  })) as HeicConvertResult;
 
-  if (convertedBuffer instanceof ArrayBuffer) {
-    return Buffer.from(new Uint8Array(convertedBuffer));
+  try {
+    const convertedBuffer = (await heicConvert({
+      buffer: sourceBuffer,
+      format: "JPEG",
+      quality: 0.92,
+    })) as HeicConvertResult;
+
+    if (convertedBuffer instanceof ArrayBuffer) {
+      return Buffer.from(new Uint8Array(convertedBuffer));
+    }
+
+    return Buffer.from(convertedBuffer);
+  } catch (error) {
+    const fallbackImage = await decodeHeifWithLibheif(sourceBuffer).catch((fallbackError) => {
+      throw new Error(
+        `${formatImageError(error)}; Libheif-Fallback: ${formatImageError(fallbackError)}`,
+      );
+    });
+
+    return sharp(fallbackImage.data, {
+      limitInputPixels: false,
+      raw: {
+        channels: 4,
+        height: fallbackImage.height,
+        width: fallbackImage.width,
+      },
+    })
+      .jpeg({ quality: 92, mozjpeg: true })
+      .toBuffer();
   }
-
-  return Buffer.from(convertedBuffer);
 }
 
-async function canDecodeHeicImage(absolutePath: string) {
+async function decodeHeifWithLibheif(sourceBuffer: Buffer): Promise<RawHeifImage> {
+  await Promise.resolve(libheif.ready);
+
+  const decoder = new libheif.HeifDecoder();
+  const images = decoder.decode(sourceBuffer);
+  const dispose = () => {
+    for (const image of images) {
+      image.free();
+    }
+
+    decoder.decoder?.delete?.();
+  };
+
+  if (images.length === 0) {
+    dispose();
+    throw new Error("HEIF-Bild wurde im Container nicht gefunden.");
+  }
+
+  const image = images[0];
+  const width = image.get_width();
+  const height = image.get_height();
+
+  try {
+    const displayData = await new Promise<{ data: Uint8ClampedArray }>((resolve, reject) => {
+      image.display(
+        {
+          data: new Uint8ClampedArray(width * height * 4),
+          height,
+          width,
+        },
+        (result) => {
+          if (!result) {
+            reject(new Error("HEIF konnte nicht in Pixel-Daten umgewandelt werden."));
+            return;
+          }
+
+          resolve(result);
+        },
+      );
+    });
+
+    return {
+      data: Buffer.from(displayData.data),
+      height,
+      width,
+    };
+  } finally {
+    dispose();
+  }
+}
+
+async function canDecodeHeifImage(absolutePath: string) {
   try {
     await convertHeifToJpegBuffer(absolutePath);
     return null;
@@ -129,7 +206,7 @@ export async function inspectStoredInventoryImage(
     const sourceBuffer = readFileSync(absolutePath);
 
     if (isLikelyHeicFile(sourceBuffer)) {
-      const decodeError = await canDecodeHeicImage(absolutePath);
+      const decodeError = await canDecodeHeifImage(absolutePath);
 
       if (decodeError) {
         return {
@@ -157,10 +234,25 @@ export async function inspectStoredInventoryImage(
     }
 
     if (isIsoBaseMediaFile(sourceBuffer)) {
+      const decodeError = await canDecodeHeifImage(absolutePath);
+
+      if (!decodeError) {
+        return {
+          canOptimize: true,
+          errorMessage: null,
+          exists: true,
+          format: "heif",
+          height: null,
+          needsOptimization: true,
+          size: stats.size,
+          width: null,
+        };
+      }
+
       return {
         canOptimize: false,
         errorMessage:
-          "Die Datei ist ein HEIF/ISO-Media-Container, aber kein automatisch decodierbares HEIC-Bild.",
+          `Die Datei ist ein HEIF/ISO-Media-Container, konnte aber nicht decodiert werden: ${decodeError}`,
         exists: true,
         format: "heif",
         height: null,
@@ -184,7 +276,7 @@ export async function inspectStoredInventoryImage(
 
   const format = metadata.format?.toLowerCase() ?? null;
   const width = metadata.width ?? null;
-  const heicDecodeError = isHeifFormat(format) ? await canDecodeHeicImage(absolutePath) : null;
+  const heicDecodeError = isHeifFormat(format) ? await canDecodeHeifImage(absolutePath) : null;
   const canOptimize =
     Boolean(format && AUTOMATICALLY_OPTIMIZABLE_FORMATS.has(format)) && !heicDecodeError;
   const needsOptimization =
