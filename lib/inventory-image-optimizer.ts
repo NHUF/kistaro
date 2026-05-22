@@ -1,5 +1,6 @@
-import { existsSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { randomUUID } from "node:crypto";
+import heicConvert from "heic-convert";
 import sharp from "sharp";
 import { INVENTORY_MEDIA_BUCKET } from "@/lib/inventory-media";
 import {
@@ -24,18 +25,51 @@ export type StoredInventoryImageInfo = {
 const AUTOMATICALLY_OPTIMIZABLE_FORMATS = new Set([
   "avif",
   "gif",
+  "heic",
+  "heif",
   "jpeg",
   "jpg",
   "png",
   "tiff",
   "webp",
 ]);
+const HEIF_BRANDS = ["heic", "heix", "hevc", "hevx", "mif1", "msf1"];
+
+type HeicConvertResult = ArrayBuffer | Buffer | Uint8Array;
 
 function formatImageError(error: unknown) {
   const message = error instanceof Error ? error.message : "Bilddatei konnte nicht gelesen werden.";
   const firstLine = message.split(/\r?\n/)[0]?.trim();
 
   return firstLine || "Bilddatei konnte nicht gelesen werden.";
+}
+
+function isHeifFormat(format: string | null) {
+  return format === "heic" || format === "heif";
+}
+
+function isLikelyHeifFile(buffer: Buffer) {
+  if (buffer.length < 12 || buffer.toString("ascii", 4, 8) !== "ftyp") {
+    return false;
+  }
+
+  const brandText = buffer.toString("ascii", 8, Math.min(buffer.length, 48)).toLowerCase();
+  return HEIF_BRANDS.some((brand) => brandText.includes(brand));
+}
+
+async function convertHeifToJpegBuffer(absolutePath: string) {
+  const sourceBuffer = readFileSync(absolutePath);
+  const convertedBuffer = (await heicConvert({
+    buffer: sourceBuffer,
+    format: "JPEG",
+    quality: 0.92,
+  })) as HeicConvertResult;
+
+  if (convertedBuffer instanceof ArrayBuffer) {
+    return Buffer.from(new Uint8Array(convertedBuffer));
+  }
+
+  return Buffer.from(convertedBuffer);
 }
 
 function getOptimizedImagePath(imagePath: string) {
@@ -75,6 +109,21 @@ export async function inspectStoredInventoryImage(
   try {
     metadata = await sharp(absolutePath, { limitInputPixels: false }).metadata();
   } catch (error) {
+    const sourceBuffer = readFileSync(absolutePath);
+
+    if (isLikelyHeifFile(sourceBuffer)) {
+      return {
+        canOptimize: true,
+        errorMessage: null,
+        exists: true,
+        format: "heif",
+        height: null,
+        needsOptimization: true,
+        size: stats.size,
+        width: null,
+      };
+    }
+
     return {
       canOptimize: false,
       errorMessage: formatImageError(error),
@@ -132,7 +181,12 @@ export async function optimizeStoredInventoryImage(imagePath: string) {
   let optimizedBuffer: Buffer;
 
   try {
-    optimizedBuffer = await sharp(absolutePath, { limitInputPixels: false })
+    const source =
+      isHeifFormat(imageInfo.format) || isLikelyHeifFile(readFileSync(absolutePath))
+        ? await convertHeifToJpegBuffer(absolutePath)
+        : absolutePath;
+
+    optimizedBuffer = await sharp(source, { limitInputPixels: false })
       .rotate()
       .resize({
         width: SERVER_OPTIMIZED_IMAGE_WIDTH,
