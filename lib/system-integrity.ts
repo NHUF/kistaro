@@ -370,7 +370,7 @@ export async function scanInventoryIntegrity(): Promise<IntegrityReport> {
         entityId: image.id,
         title: `Bild nicht automatisch optimierbar: ${image.name || image.id}`,
         description: `${imageInfo.errorMessage ?? "Dieses Bildformat kann auf dem Server nicht automatisch verarbeitet werden."} Datei: ca. ${sizeInKb} KB. Bitte das Bild ersetzen oder neu hochladen.`,
-        repairMode: "none",
+        repairMode: "remove_image_reference",
         metadata: {
           entityType: image.entity_type,
           imagePath: image.image_path,
@@ -464,6 +464,26 @@ async function optimizeImageIssue(issue: IntegrityIssue) {
   return "Bild wurde optimiert.";
 }
 
+async function removeBrokenImageReference(issue: IntegrityIssue) {
+  const imagePath = issue.metadata?.imagePath;
+
+  if (issue.code === "item_image_unreadable") {
+    await query(`update public.items set image_path = null where id = $1`, [issue.entityId]);
+  } else if (issue.code === "location_image_unreadable") {
+    await query(`update public.locations set image_path = null where id = $1`, [issue.entityId]);
+  } else if (issue.code === "template_image_unreadable") {
+    await query(`update public.inventory_templates set image_path = null where id = $1`, [
+      issue.entityId,
+    ]);
+  }
+
+  if (imagePath) {
+    removeStorageFile(INVENTORY_MEDIA_BUCKET, imagePath);
+  }
+
+  return "Defekter Bildverweis wurde entfernt.";
+}
+
 async function repairIssue(issue: IntegrityIssue, targetLocationId?: string | null) {
   switch (issue.code) {
     case "item_missing_location": {
@@ -537,6 +557,11 @@ async function repairIssue(issue: IntegrityIssue, targetLocationId?: string | nu
     case "location_image_unoptimized":
     case "template_image_unoptimized": {
       return optimizeImageIssue(issue);
+    }
+    case "item_image_unreadable":
+    case "location_image_unreadable":
+    case "template_image_unreadable": {
+      return removeBrokenImageReference(issue);
     }
     default:
       throw new Error("Dieser Defekt kann aktuell nicht automatisch repariert werden.");

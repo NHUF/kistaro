@@ -977,7 +977,9 @@ export function SystemPage({ status }: Props) {
                               ? "Manuell pruefen"
                               : issue.repairMode === "optimize_image"
                                 ? "Bild optimieren"
-                                : "Defekt reparieren"}
+                                : issue.repairMode === "remove_image_reference"
+                                  ? "Bildverweis entfernen"
+                                  : "Defekt reparieren"}
                           </button>
                         </div>
                       </div>

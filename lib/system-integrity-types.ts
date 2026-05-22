@@ -7,6 +7,7 @@ export type IntegrityRepairMode =
   | "reset_location_parent"
   | "normalize_date"
   | "optimize_image"
+  | "remove_image_reference"
   | "none";
 
 export type IntegrityIssue = {
