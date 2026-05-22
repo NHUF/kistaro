@@ -1,4 +1,4 @@
-export type IntegrityIssueSeverity = "error" | "warning";
+export type IntegrityIssueSeverity = "error" | "warning" | "info";
 
 export type IntegrityRepairMode =
   | "remove_relation"
@@ -6,6 +6,7 @@ export type IntegrityRepairMode =
   | "reassign_item_location"
   | "reset_location_parent"
   | "normalize_date"
+  | "optimize_image"
   | "none";
 
 export type IntegrityIssue = {
@@ -19,7 +20,10 @@ export type IntegrityIssue = {
     | "item_tag_invalid"
     | "location_tag_invalid"
     | "item_purchase_date_invalid"
-    | "template_purchase_date_invalid";
+    | "template_purchase_date_invalid"
+    | "item_image_unoptimized"
+    | "location_image_unoptimized"
+    | "template_image_unoptimized";
   severity: IntegrityIssueSeverity;
   entityType: "item" | "location" | "document" | "link" | "tag" | "template" | "system";
   entityId: string;

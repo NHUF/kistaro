@@ -1,7 +1,13 @@
 import { existsSync } from "node:fs";
 import { query, queryRows } from "@/lib/db";
+import {
+  inspectStoredInventoryImage,
+  optimizeStoredInventoryImage,
+  SERVER_OPTIMIZED_IMAGE_WIDTH,
+} from "@/lib/inventory-image-optimizer";
+import { INVENTORY_MEDIA_BUCKET } from "@/lib/inventory-media";
 import { hasInvalidStoredDateValue, normalizeNullableDateValue } from "@/lib/inventory-dates";
-import { resolveStoragePath } from "@/lib/local-file-storage";
+import { removeStorageFile, resolveStoragePath } from "@/lib/local-file-storage";
 import { logSystemActivity } from "@/lib/system-activity";
 import type {
   IntegrityIssue,
@@ -12,6 +18,13 @@ import type {
 type RepairRequest =
   | { action: "repair"; issueId: string; targetLocationId?: string | null }
   | { action: "repair_all_safe" };
+
+type ImageReference = {
+  entity_type: "item" | "location" | "template";
+  id: string;
+  image_path: string | null;
+  name: string | null;
+};
 
 function createIssueId(code: IntegrityIssue["code"], ...parts: Array<string | null | undefined>) {
   return [code, ...parts.map((part) => part ?? "null")].join(":");
@@ -33,6 +46,7 @@ export async function scanInventoryIntegrity(): Promise<IntegrityReport> {
     locationTagsInvalid,
     itemsWithPurchaseDate,
     templatesWithPurchaseDate,
+    imageReferences,
   ] = await Promise.all([
     queryRows<{ id: string; name: string }>(
       `select id, name from public.locations order by name`,
@@ -127,6 +141,20 @@ export async function scanInventoryIntegrity(): Promise<IntegrityReport> {
       `select id, name, item_purchase_date
        from public.inventory_templates
        where item_purchase_date is not null`,
+    ),
+    queryRows<ImageReference>(
+      `select 'item' as entity_type, id, name, image_path
+       from public.items
+       where coalesce(trim(image_path), '') <> ''
+       union all
+       select 'location' as entity_type, id, name, image_path
+       from public.locations
+       where coalesce(trim(image_path), '') <> ''
+       union all
+       select 'template' as entity_type, id, name, image_path
+       from public.inventory_templates
+       where coalesce(trim(image_path), '') <> ''
+       order by entity_type, name`,
     ),
   ]);
 
@@ -295,9 +323,56 @@ export async function scanInventoryIntegrity(): Promise<IntegrityReport> {
     });
   }
 
+  for (const image of imageReferences) {
+    if (!image.image_path) {
+      continue;
+    }
+
+    const imageInfo = await inspectStoredInventoryImage(image.image_path).catch(() => null);
+
+    if (!imageInfo?.exists || !imageInfo.needsOptimization) {
+      continue;
+    }
+
+    const code: IntegrityIssue["code"] =
+      image.entity_type === "item"
+        ? "item_image_unoptimized"
+        : image.entity_type === "location"
+          ? "location_image_unoptimized"
+          : "template_image_unoptimized";
+    const sizeInKb = Math.max(1, Math.round(imageInfo.size / 1024));
+    const widthText = imageInfo.width ? `${imageInfo.width}px breit` : "ohne lesbare Breite";
+    const formatText = imageInfo.format ? imageInfo.format.toUpperCase() : "unbekanntes Format";
+
+    issues.push({
+      id: createIssueId(code, image.id, image.image_path),
+      code,
+      severity: "info",
+      entityType: image.entity_type,
+      entityId: image.id,
+      title: `Bild kann optimiert werden: ${image.name || image.id}`,
+      description: `Dieses Bild ist ${widthText}, ${formatText}, ca. ${sizeInKb} KB. Es kann platzsparend als JPEG mit maximal ${SERVER_OPTIMIZED_IMAGE_WIDTH}px Breite gespeichert werden.`,
+      repairMode: "optimize_image",
+      metadata: {
+        entityType: image.entity_type,
+        imagePath: image.image_path,
+        imageFormat: imageInfo.format,
+        imageHeight: imageInfo.height?.toString() ?? null,
+        imageSize: imageInfo.size.toString(),
+        imageWidth: imageInfo.width?.toString() ?? null,
+      },
+    });
+  }
+
   const issueList = issues.sort((a, b) => {
     if (a.severity !== b.severity) {
-      return a.severity === "error" ? -1 : 1;
+      const severityOrder: Record<IntegrityIssue["severity"], number> = {
+        error: 0,
+        warning: 1,
+        info: 2,
+      };
+
+      return severityOrder[a.severity] - severityOrder[b.severity];
     }
 
     return a.title.localeCompare(b.title, "de");
@@ -310,6 +385,37 @@ export async function scanInventoryIntegrity(): Promise<IntegrityReport> {
     issues: issueList,
     locations: locations as IntegrityLocationOption[],
   };
+}
+
+async function optimizeImageIssue(issue: IntegrityIssue) {
+  const imagePath = issue.metadata?.imagePath;
+
+  if (!imagePath) {
+    throw new Error("Bildpfad fehlt.");
+  }
+
+  const optimizedImage = await optimizeStoredInventoryImage(imagePath);
+
+  if (issue.code === "item_image_unoptimized") {
+    await query(`update public.items set image_path = $1 where id = $2`, [
+      optimizedImage.nextPath,
+      issue.entityId,
+    ]);
+  } else if (issue.code === "location_image_unoptimized") {
+    await query(`update public.locations set image_path = $1 where id = $2`, [
+      optimizedImage.nextPath,
+      issue.entityId,
+    ]);
+  } else if (issue.code === "template_image_unoptimized") {
+    await query(`update public.inventory_templates set image_path = $1 where id = $2`, [
+      optimizedImage.nextPath,
+      issue.entityId,
+    ]);
+  }
+
+  removeStorageFile(INVENTORY_MEDIA_BUCKET, imagePath);
+
+  return "Bild wurde optimiert.";
 }
 
 async function repairIssue(issue: IntegrityIssue, targetLocationId?: string | null) {
@@ -380,6 +486,11 @@ async function repairIssue(issue: IntegrityIssue, targetLocationId?: string | nu
         issue.entityId,
       ]);
       return "Kaufdatum der Vorlage wurde bereinigt.";
+    }
+    case "item_image_unoptimized":
+    case "location_image_unoptimized":
+    case "template_image_unoptimized": {
+      return optimizeImageIssue(issue);
     }
     default:
       throw new Error("Dieser Defekt kann aktuell nicht automatisch repariert werden.");

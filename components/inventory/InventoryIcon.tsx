@@ -84,12 +84,18 @@ function prettifyIconName(name: string) {
     .trim();
 }
 
+function normalizeIconName(name: unknown) {
+  return typeof name === "string" ? name.trim() : "";
+}
+
 export function getMaterialIconLabel(name: string | null | undefined) {
-  if (!name) {
+  const normalizedName = normalizeIconName(name);
+
+  if (!normalizedName) {
     return null;
   }
 
-  return prettifyIconName(name);
+  return prettifyIconName(normalizedName);
 }
 
 function LazyMaterialIcon({
@@ -137,7 +143,7 @@ export function MaterialIcon({
 }: IconProps & {
   name: string | null | undefined;
 }) {
-  const resolvedName = name ?? "";
+  const resolvedName = normalizeIconName(name);
   const KnownIcon = knownIcons[resolvedName];
 
   if (KnownIcon) {
@@ -159,8 +165,10 @@ export function LocationTypeIcon({
   type: LocationType | null | undefined;
   iconName?: string | null | undefined;
 }) {
-  if (iconName) {
-    return <MaterialIcon className={className} name={iconName} />;
+  const resolvedIconName = normalizeIconName(iconName);
+
+  if (resolvedIconName) {
+    return <MaterialIcon className={className} name={resolvedIconName} />;
   }
 
   const ResolvedIcon = knownIcons[locationIcons[type ?? ""] ?? ""] ?? MdQuestionMark;
@@ -179,8 +187,10 @@ export function ItemStatusIcon({
   status: ItemStatus | null | undefined;
   iconName?: string | null | undefined;
 }) {
-  if (iconName) {
-    return <MaterialIcon className={className} name={iconName} />;
+  const resolvedIconName = normalizeIconName(iconName);
+
+  if (resolvedIconName) {
+    return <MaterialIcon className={className} name={resolvedIconName} />;
   }
 
   const ResolvedIcon = knownIcons[itemIcons[status ?? ""] ?? ""] ?? MdInventory2;

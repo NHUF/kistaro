@@ -111,6 +111,18 @@ function normalizeItemQuantity(value: unknown) {
   return Math.floor(parsedValue);
 }
 
+function safeTextValue(value: unknown, fallback = "") {
+  if (value == null) {
+    return fallback;
+  }
+
+  if (typeof value === "string") {
+    return value;
+  }
+
+  return String(value);
+}
+
 function nextNameFromTemplate(templateName: string, existingNames: string[]) {
   const prefix = templateName.replace(/-0000$/, "");
   const nextNumber =
@@ -1085,14 +1097,14 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
 
   function openItemEditModal(item: Item) {
     setEditItem(item);
-    setEditItemName(item.name);
-    setEditItemDescription(item.description ?? "");
+    setEditItemName(safeTextValue(item.name));
+    setEditItemDescription(safeTextValue(item.description));
     setEditItemQuantity(normalizeItemQuantity(item.quantity).toString());
     setEditItemValue(item.value?.toString() ?? "");
     setEditItemPurchaseDate(normalizeDateInputValue(item.purchase_date));
     setEditItemStatus(item.status ?? "");
     setEditItemLocation(item.location_id);
-    setEditItemIcon(item.icon_name ?? "");
+    setEditItemIcon(safeTextValue(item.icon_name));
     setEditItemImageFile(null);
     setEditItemRemoveImage(false);
     setEditItemLinks([]);
@@ -2098,7 +2110,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
       )}
 
       {editItem && (
-        <Modal size="lg">
+        <Modal size="lg" onClose={closeItemEditModal}>
           <SectionErrorBoundary
             fallbackTitle="Item bearbeiten"
             fallbackDescription="Der Bearbeiten-Dialog konnte nicht vollständig geladen werden. Öffne alternativ die Detailseite des Items."
@@ -2108,7 +2120,7 @@ export function DashboardClient({ initialData }: { initialData: DashboardData })
               eyebrow="Bearbeiten"
               title="Item bearbeiten"
             />
-            <FieldInfo label="ID" value={editItem.id} />
+            <FieldInfo label="ID" value={editItem.id ?? "Unbekannt"} />
             <FieldInfo
               label="Erstellt"
               value={editItem.created_at ? editItem.created_at : "Unbekannt"}

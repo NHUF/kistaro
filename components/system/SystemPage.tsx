@@ -923,7 +923,9 @@ export function SystemPage({ status }: Props) {
                       className={`rounded-2xl border p-4 shadow-sm ${
                         issue.severity === "error"
                           ? "border-red-200 bg-red-50 dark:border-red-950 dark:bg-red-950/20"
-                          : "border-amber-200 bg-amber-50 dark:border-amber-950 dark:bg-amber-950/20"
+                          : issue.severity === "warning"
+                            ? "border-amber-200 bg-amber-50 dark:border-amber-950 dark:bg-amber-950/20"
+                            : "border-sky-200 bg-sky-50 dark:border-sky-950 dark:bg-sky-950/20"
                       }`}
                     >
                       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -971,7 +973,11 @@ export function SystemPage({ status }: Props) {
                             }
                             className="inline-flex items-center justify-center rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-200"
                           >
-                            {issue.repairMode === "none" ? "Manuell pruefen" : "Defekt reparieren"}
+                            {issue.repairMode === "none"
+                              ? "Manuell pruefen"
+                              : issue.repairMode === "optimize_image"
+                                ? "Bild optimieren"
+                                : "Defekt reparieren"}
                           </button>
                         </div>
                       </div>

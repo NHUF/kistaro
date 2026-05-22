@@ -19,6 +19,7 @@ export function IconPicker({
   onChange: (nextValue: string) => void;
   emptyLabel?: string;
 }) {
+  const safeValue = typeof value === "string" ? value.trim() : "";
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState(false);
   const [allOptions, setAllOptions] = useState<Array<{ value: string; label: string }>>([]);
@@ -96,10 +97,10 @@ export function IconPicker({
         <span className="min-w-0">
           <span className="block text-sm font-medium text-gray-700 dark:text-gray-200">{label}</span>
           <span className="mt-1 flex items-center gap-2 text-xs text-gray-400">
-            {value ? (
+            {safeValue ? (
               <>
-                <MaterialIcon name={value} className="h-4 w-4" />
-                <span className="truncate">{getMaterialIconLabel(value)}</span>
+                <MaterialIcon name={safeValue} className="h-4 w-4" />
+                <span className="truncate">{getMaterialIconLabel(safeValue)}</span>
               </>
             ) : (
               <span>{emptyLabel}</span>
@@ -125,7 +126,7 @@ export function IconPicker({
             type="button"
             onClick={() => onChange("")}
             className={`flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left text-sm transition ${
-              value === ""
+              safeValue === ""
                 ? "border-green-500 bg-green-50 text-green-800 dark:border-green-400 dark:bg-green-950/30 dark:text-green-200"
                 : "border-gray-200 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
             }`}
@@ -146,7 +147,7 @@ export function IconPicker({
                 type="button"
                 onClick={() => onChange(option.value)}
                 className={`flex items-center gap-3 rounded-xl border px-3 py-2 text-left transition ${
-                  value === option.value
+                  safeValue === option.value
                     ? "border-green-500 bg-green-50 text-green-800 dark:border-green-400 dark:bg-green-950/30 dark:text-green-200"
                     : "border-gray-200 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800"
                 }`}

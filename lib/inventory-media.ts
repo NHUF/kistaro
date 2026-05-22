@@ -18,11 +18,17 @@ function createObjectId() {
 }
 
 export function getInventoryImageUrl(path: string | null | undefined) {
-  if (!path) {
+  if (typeof path !== "string") {
     return null;
   }
 
-  const { data } = supabase.storage.from(INVENTORY_MEDIA_BUCKET).getPublicUrl(path);
+  const normalizedPath = path.trim();
+
+  if (!normalizedPath) {
+    return null;
+  }
+
+  const { data } = supabase.storage.from(INVENTORY_MEDIA_BUCKET).getPublicUrl(normalizedPath);
   return data.publicUrl;
 }
 
@@ -123,11 +129,17 @@ export async function uploadInventoryImage(
 }
 
 export async function removeInventoryImage(path: string | null | undefined) {
-  if (!path) {
+  if (typeof path !== "string") {
     return;
   }
 
-  const { error } = await supabase.storage.from(INVENTORY_MEDIA_BUCKET).remove([path]);
+  const normalizedPath = path.trim();
+
+  if (!normalizedPath) {
+    return;
+  }
+
+  const { error } = await supabase.storage.from(INVENTORY_MEDIA_BUCKET).remove([normalizedPath]);
 
   if (error) {
     throw new Error(error.message);
@@ -135,11 +147,17 @@ export async function removeInventoryImage(path: string | null | undefined) {
 }
 
 export function getInventoryDocumentUrl(path: string | null | undefined) {
-  if (!path) {
+  if (typeof path !== "string") {
     return null;
   }
 
-  const { data } = supabase.storage.from(INVENTORY_DOCUMENT_BUCKET).getPublicUrl(path);
+  const normalizedPath = path.trim();
+
+  if (!normalizedPath) {
+    return null;
+  }
+
+  const { data } = supabase.storage.from(INVENTORY_DOCUMENT_BUCKET).getPublicUrl(normalizedPath);
   return data.publicUrl;
 }
 
@@ -164,11 +182,17 @@ export async function uploadInventoryDocument(file: File) {
 }
 
 export async function removeInventoryDocument(path: string | null | undefined) {
-  if (!path) {
+  if (typeof path !== "string") {
     return;
   }
 
-  const { error } = await supabase.storage.from(INVENTORY_DOCUMENT_BUCKET).remove([path]);
+  const normalizedPath = path.trim();
+
+  if (!normalizedPath) {
+    return;
+  }
+
+  const { error } = await supabase.storage.from(INVENTORY_DOCUMENT_BUCKET).remove([normalizedPath]);
 
   if (error) {
     throw new Error(error.message);
