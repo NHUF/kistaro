@@ -33,7 +33,7 @@ const AUTOMATICALLY_OPTIMIZABLE_FORMATS = new Set([
   "tiff",
   "webp",
 ]);
-const HEIF_BRANDS = ["heic", "heix", "hevc", "hevx", "mif1", "msf1"];
+const HEIC_BRANDS = ["heic", "heix", "hevc", "hevx"];
 
 type HeicConvertResult = ArrayBuffer | Buffer | Uint8Array;
 
@@ -48,13 +48,21 @@ function isHeifFormat(format: string | null) {
   return format === "heic" || format === "heif";
 }
 
-function isLikelyHeifFile(buffer: Buffer) {
+function isIsoBaseMediaFile(buffer: Buffer) {
   if (buffer.length < 12 || buffer.toString("ascii", 4, 8) !== "ftyp") {
     return false;
   }
 
+  return true;
+}
+
+function isLikelyHeicFile(buffer: Buffer) {
+  if (!isIsoBaseMediaFile(buffer)) {
+    return false;
+  }
+
   const brandText = buffer.toString("ascii", 8, Math.min(buffer.length, 48)).toLowerCase();
-  return HEIF_BRANDS.some((brand) => brandText.includes(brand));
+  return HEIC_BRANDS.some((brand) => brandText.includes(brand));
 }
 
 async function convertHeifToJpegBuffer(absolutePath: string) {
@@ -70,6 +78,15 @@ async function convertHeifToJpegBuffer(absolutePath: string) {
   }
 
   return Buffer.from(convertedBuffer);
+}
+
+async function canDecodeHeicImage(absolutePath: string) {
+  try {
+    await convertHeifToJpegBuffer(absolutePath);
+    return null;
+  } catch (error) {
+    return formatImageError(error);
+  }
 }
 
 function getOptimizedImagePath(imagePath: string) {
@@ -111,14 +128,43 @@ export async function inspectStoredInventoryImage(
   } catch (error) {
     const sourceBuffer = readFileSync(absolutePath);
 
-    if (isLikelyHeifFile(sourceBuffer)) {
+    if (isLikelyHeicFile(sourceBuffer)) {
+      const decodeError = await canDecodeHeicImage(absolutePath);
+
+      if (decodeError) {
+        return {
+          canOptimize: false,
+          errorMessage: `HEIC wurde erkannt, konnte aber nicht decodiert werden: ${decodeError}`,
+          exists: true,
+          format: "heic",
+          height: null,
+          needsOptimization: false,
+          size: stats.size,
+          width: null,
+        };
+      }
+
       return {
         canOptimize: true,
         errorMessage: null,
         exists: true,
-        format: "heif",
+        format: "heic",
         height: null,
         needsOptimization: true,
+        size: stats.size,
+        width: null,
+      };
+    }
+
+    if (isIsoBaseMediaFile(sourceBuffer)) {
+      return {
+        canOptimize: false,
+        errorMessage:
+          "Die Datei ist ein HEIF/ISO-Media-Container, aber kein automatisch decodierbares HEIC-Bild.",
+        exists: true,
+        format: "heif",
+        height: null,
+        needsOptimization: false,
         size: stats.size,
         width: null,
       };
@@ -138,7 +184,9 @@ export async function inspectStoredInventoryImage(
 
   const format = metadata.format?.toLowerCase() ?? null;
   const width = metadata.width ?? null;
-  const canOptimize = Boolean(format && AUTOMATICALLY_OPTIMIZABLE_FORMATS.has(format));
+  const heicDecodeError = isHeifFormat(format) ? await canDecodeHeicImage(absolutePath) : null;
+  const canOptimize =
+    Boolean(format && AUTOMATICALLY_OPTIMIZABLE_FORMATS.has(format)) && !heicDecodeError;
   const needsOptimization =
     canOptimize &&
     (format !== "jpeg" || (typeof width === "number" && width > SERVER_OPTIMIZED_IMAGE_WIDTH));
@@ -147,7 +195,9 @@ export async function inspectStoredInventoryImage(
     canOptimize,
     errorMessage: canOptimize
       ? null
-      : `Bildformat ${format?.toUpperCase() ?? "unbekannt"} kann auf diesem Server nicht automatisch optimiert werden.`,
+      : heicDecodeError
+        ? `HEIC/HEIF wurde erkannt, konnte aber nicht decodiert werden: ${heicDecodeError}`
+        : `Bildformat ${format?.toUpperCase() ?? "unbekannt"} kann auf diesem Server nicht automatisch optimiert werden.`,
     exists: true,
     format,
     height: metadata.height ?? null,
@@ -182,7 +232,7 @@ export async function optimizeStoredInventoryImage(imagePath: string) {
 
   try {
     const source =
-      isHeifFormat(imageInfo.format) || isLikelyHeifFile(readFileSync(absolutePath))
+      isHeifFormat(imageInfo.format) || isLikelyHeicFile(readFileSync(absolutePath))
         ? await convertHeifToJpegBuffer(absolutePath)
         : absolutePath;
 
