@@ -34,6 +34,21 @@ function isRepairable(issue: IntegrityIssue) {
   return issue.repairMode !== "none";
 }
 
+function getImageIssueCode(
+  entityType: ImageReference["entity_type"],
+  issueType: "unoptimized" | "unreadable",
+): IntegrityIssue["code"] {
+  if (entityType === "item") {
+    return issueType === "unoptimized" ? "item_image_unoptimized" : "item_image_unreadable";
+  }
+
+  if (entityType === "location") {
+    return issueType === "unoptimized" ? "location_image_unoptimized" : "location_image_unreadable";
+  }
+
+  return issueType === "unoptimized" ? "template_image_unoptimized" : "template_image_unreadable";
+}
+
 export async function scanInventoryIntegrity(): Promise<IntegrityReport> {
   const [
     locations,
@@ -328,18 +343,49 @@ export async function scanInventoryIntegrity(): Promise<IntegrityReport> {
       continue;
     }
 
-    const imageInfo = await inspectStoredInventoryImage(image.image_path).catch(() => null);
+    const imageInfo = await inspectStoredInventoryImage(image.image_path).catch((error) => ({
+      canOptimize: false,
+      errorMessage: error instanceof Error ? error.message : "Bilddatei konnte nicht gelesen werden.",
+      exists: true,
+      format: null,
+      height: null,
+      needsOptimization: false,
+      size: 0,
+      width: null,
+    }));
 
-    if (!imageInfo?.exists || !imageInfo.needsOptimization) {
+    if (!imageInfo?.exists) {
       continue;
     }
 
-    const code: IntegrityIssue["code"] =
-      image.entity_type === "item"
-        ? "item_image_unoptimized"
-        : image.entity_type === "location"
-          ? "location_image_unoptimized"
-          : "template_image_unoptimized";
+    if (!imageInfo.canOptimize) {
+      const code = getImageIssueCode(image.entity_type, "unreadable");
+      const sizeInKb = Math.max(1, Math.round(imageInfo.size / 1024));
+
+      issues.push({
+        id: createIssueId(code, image.id, image.image_path),
+        code,
+        severity: "warning",
+        entityType: image.entity_type,
+        entityId: image.id,
+        title: `Bild nicht automatisch optimierbar: ${image.name || image.id}`,
+        description: `${imageInfo.errorMessage ?? "Dieses Bildformat kann auf dem Server nicht automatisch verarbeitet werden."} Datei: ca. ${sizeInKb} KB. Bitte das Bild ersetzen oder neu hochladen.`,
+        repairMode: "none",
+        metadata: {
+          entityType: image.entity_type,
+          imagePath: image.image_path,
+          imageFormat: imageInfo.format,
+          imageSize: imageInfo.size.toString(),
+        },
+      });
+      continue;
+    }
+
+    if (!imageInfo.needsOptimization) {
+      continue;
+    }
+
+    const code = getImageIssueCode(image.entity_type, "unoptimized");
     const sizeInKb = Math.max(1, Math.round(imageInfo.size / 1024));
     const widthText = imageInfo.width ? `${imageInfo.width}px breit` : "ohne lesbare Breite";
     const formatText = imageInfo.format ? imageInfo.format.toUpperCase() : "unbekanntes Format";
@@ -509,19 +555,37 @@ export async function repairInventoryIntegrity(request: RepairRequest) {
       return { message: "Keine sicher reparierbaren Defekte gefunden." };
     }
 
+    let repairedIssueCount = 0;
+    const failedIssues: Array<{ issue: IntegrityIssue; message: string }> = [];
+
     for (const issue of safeIssues) {
-      await repairIssue(issue, null);
+      try {
+        await repairIssue(issue, null);
+        repairedIssueCount += 1;
+      } catch (error) {
+        failedIssues.push({
+          issue,
+          message: error instanceof Error ? error.message : "Unbekannter Fehler",
+        });
+      }
     }
 
     await logSystemActivity({
       title: "Integritaetsreparatur ausgefuehrt",
-      description: `${safeIssues.length} sicher reparierbare Defekte wurden bereinigt.`,
+      description: `${repairedIssueCount} sicher reparierbare Defekte wurden bereinigt.`,
       metadata: {
-        repaired_issue_count: safeIssues.length,
+        failed_issue_count: failedIssues.length,
+        repaired_issue_count: repairedIssueCount,
       },
     });
 
-    return { message: `${safeIssues.length} Defekte wurden automatisch repariert.` };
+    if (failedIssues.length > 0) {
+      return {
+        message: `${repairedIssueCount} Defekte wurden automatisch repariert. ${failedIssues.length} Eintraege konnten nicht automatisch repariert werden und bleiben in der Liste.`,
+      };
+    }
+
+    return { message: `${repairedIssueCount} Defekte wurden automatisch repariert.` };
   }
 
   const issue = report.issues.find((entry) => entry.id === request.issueId);

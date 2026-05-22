@@ -23,7 +23,10 @@ export type IntegrityIssue = {
     | "template_purchase_date_invalid"
     | "item_image_unoptimized"
     | "location_image_unoptimized"
-    | "template_image_unoptimized";
+    | "template_image_unoptimized"
+    | "item_image_unreadable"
+    | "location_image_unreadable"
+    | "template_image_unreadable";
   severity: IntegrityIssueSeverity;
   entityType: "item" | "location" | "document" | "link" | "tag" | "template" | "system";
   entityId: string;
